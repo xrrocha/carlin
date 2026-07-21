@@ -31,7 +31,19 @@
            (rt/render-hiccup [:a {:href (rt/raw "/a?x=1&y=2")}] {:mode :html}))))
   (testing "escaped text next to raw stays escaped"
     (is (= "<p>&lt;i&gt;<b>x</b></p>"
-           (rt/render-hiccup [:p "<i>" (rt/raw "<b>x</b>")] {:mode :html})))))
+           (rt/render-hiccup [:p "<i>" (rt/raw "<b>x</b>")] {:mode :html}))))
+  (testing "raw in CLASS position: one verbatim token, whitespace and all
+            (records-are-maps: Raw must not fall into class-tokens' map branch)"
+    (is (= "<foo class=\"<%= bar %> lol rofl\"></foo>"
+           (rt/render-hiccup [:foo {:class (rt/raw "<%= bar %> lol rofl")}]
+                             {:mode :html}))))
+  (testing "mixed class list: non-raw tokens escape, raw tokens pass through"
+    (is (= "<foo class=\"a b<c on\"></foo>"
+           (rt/render-hiccup [:foo {:class ["a" (rt/raw "b<c") {:on true}]}]
+                             {:mode :html}))))
+  (testing "plain string class still escapes (the boundary: raw is opt-in)"
+    (is (= "<foo class=\"&lt;%= bar %&gt;\"></foo>"
+           (rt/render-hiccup [:foo {:class "<%= bar %>"}] {:mode :html})))))
 
 (deftest profiles
   (testing "void elements: html vs xml (§7.2)"

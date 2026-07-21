@@ -98,16 +98,18 @@
 (declare gen)
 
 (defn- piece->code
-  "context: :escaped (normal text) — statics plain, #{} escaped by the
-  serializer; :static-raw (literal HTML lines) — statics raw, #{} escaped;
-  :all-raw (raw-text dot blocks, Q5) — everything raw."
+  "context: :escaped (normal text) — statics VERBATIM (§4.1 rev. 7: escaping
+  is a property of the dynamic boundary; literal template text is the
+  author's own characters, hand-authored entities survive), #{} escaped by
+  the serializer; :all-raw (raw-text dot blocks, Q5) — everything raw, #{}
+  included (§3.4 rev. 7: :raw-text-tags governs interpolation only, statics
+  being verbatim everywhere anyway). The former :static-raw context (literal
+  markup lines) is now indistinguishable from :escaped and was folded in."
   [ctx context p]
   (cond
-    (string? p) (case context
-                  :escaped p
-                  (:static-raw :all-raw) `(rt/raw ~p))
+    (string? p) `(rt/raw ~p)
     (:expr p)   (case context
-                  (:escaped :static-raw) (:expr p)
+                  :escaped (:expr p)
                   :all-raw `(rt/raw (str ~(:expr p))))
     (:raw p)    `(rt/raw (str ~(:raw p)))
     (:node p)   (gen ctx (:node p))))
@@ -357,7 +359,7 @@
     :text-block     (text-code ctx :escaped (:text (:body node)) (:pos node))
     :literal-html   (if (:verbatim? node)
                       `(rt/raw ~(:text node))
-                      (text-code ctx :static-raw (:text node) (:pos node)))
+                      (text-code ctx :escaped (:text node) (:pos node)))
     :buffered       (if (:raw? node) `(rt/raw (str ~(:form node))) (:form node))
     :code           (if (seq (:children node))
                       (if (:form node)

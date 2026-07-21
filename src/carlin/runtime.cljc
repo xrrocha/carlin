@@ -73,11 +73,15 @@
   "One :class value → a seq of class-name strings. Collections flatten;
   a map contributes its truthy keys (the conditional-class idiom);
   strings split on whitespace; keywords and symbols use their name.
-  Duplicates are preserved — browsers do not care, and dedup masks intent."
+  Duplicates are preserved — browsers do not care, and dedup masks intent.
+  A Raw value (§6.1: honored in attribute position) passes through as ONE
+  token, whitespace and all — checked before map?, because records are maps
+  (the same trap the serializer's attrs test hit; third sighting)."
   [v]
   (cond
     (nil? v)     nil
     (false? v)   nil
+    (raw? v)     [v]
     (map? v)     (keep (fn [[k truthy]] (when truthy (name k))) v)
     (coll? v)    (mapcat class-tokens v)
     (keyword? v) [(name v)]
@@ -223,7 +227,8 @@
 (defn- attr-value-str [k v]
   (cond
     (raw? v)     (:s v)
-    (= :class k) (escape-attr (str/join " " (class-tokens v)))
+    (= :class k) (str/join " " (map #(if (raw? %) (:s %) (escape-attr %))
+                                    (class-tokens v)))
     (map? v)     (escape-attr (css-value v))
     (coll? v)    (escape-attr (str/join " " v))
     (keyword? v) (escape-attr (name v))

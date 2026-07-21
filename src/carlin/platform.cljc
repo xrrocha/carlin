@@ -67,11 +67,32 @@
      (throw (ex-info "read-form-at: CLJS branch lands with the matrix activation"
                      {:carlin/error :not-implemented}))))
 
+#?(:clj
+   (def ^:private template-ns
+     "The namespace template expressions resolve and evaluate in (S15).
+  Refers clojure.core plus exactly two carlin.runtime helpers — `raw` and
+  `->js`, the spec's own expression-position idioms (§3.5/D5, §6.3) — making
+  them ambient vocabulary through ordinary namespace mechanics rather than
+  reserved words rewritten by codegen (user names stay user data, rev. 4
+  hygiene; lexical shadowing still works). evaluate and known-symbol? both
+  use it, so free-symbol analysis and evaluation agree by construction —
+  and templates no longer resolve against whatever *ns* the caller happens
+  to be in, which was fragility, not a feature."
+     (let [ns-sym 'carlin.template-env]
+       (or (find-ns ns-sym)
+           (let [n (create-ns ns-sym)]
+             (binding [*ns* n]
+               (clojure.core/refer 'clojure.core)
+               (require 'carlin.runtime)
+               (clojure.core/refer 'carlin.runtime :only '[raw ->js]))
+             n)))))
+
 (defn evaluate
-  "Evaluate a form per the platform's default strategy (spec §8.2). The sci
-  backend arrives as an opt-in :eval strategy later; this is the plain path."
+  "Evaluate a form per the platform's default strategy (spec §8.2), inside
+  the template namespace (S15). The sci backend arrives as an opt-in :eval
+  strategy later; this is the plain path."
   [form]
-  #?(:clj  (eval form)
+  #?(:clj  (binding [*ns* template-ns] (eval form))
      :cljs (throw (ex-info "evaluate: use the deftemplate macro path or sci on CLJS"
                            {:carlin/error :not-implemented}))))
 
@@ -83,7 +104,10 @@
 
 (defn known-symbol?
   "Is `sym` a known global (not a model key)? Free-symbol analysis (spec §2)
-  consults this; unresolvable symbols are destructured from the model."
+  consults this; unresolvable symbols are destructured from the model.
+  Resolution happens in the template namespace (S15), the same surface
+  evaluate uses — so `raw` and `->js` are known, and the answer no longer
+  depends on the caller's ambient *ns*."
   [sym]
-  #?(:clj  (some? (resolve sym))
+  #?(:clj  (some? (ns-resolve template-ns sym))
      :cljs false))

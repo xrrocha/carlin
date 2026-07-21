@@ -157,10 +157,23 @@ golden file and logging the departure, never by silently matching pug.
   matching pug here would mean rewriting it first. Ricardo-ratified (S12),
   2026-07-19: "an opportunity to improve on the status quo… as long as we
   document the divergence properly."
+  **Scope narrowed by spec rev. 7 (escaping boundary), 2026-07-21.** Rev. 7
+  moves escaping to the dynamic boundary: literal template text is verbatim;
+  the five-entity escaper (S12's substance) still applies wherever escaping
+  applies — interpolation, buffered code, attribute values. Consequences for
+  the two edited goldens, position by position: `attrs.html` (`&lt;baz&gt;`,
+  ATTRIBUTE position) **stands** — attribute values remain escaped, stricter
+  than pug, per S12. `inheritance.alert-dialog.html` (`I&#39;m`, TEXT
+  position) **reverted to pug's original verbatim apostrophe** — its edit was
+  a workaround for static-text escaping, which rev. 7 abolishes; the revert
+  was verified byte-identical (modulo the apostrophe) against the pugjs
+  pug@3.0.2 tag. Rev. 7's revision note claimed both edits lived in attribute
+  position; that premise was wrong for alert-dialog, and this annotation is
+  the correction. So S12 is not reversed but re-scoped: one golden edit
+  survives it, one dissolves under the boundary it never should have crossed.
   NOTE for whoever works `mixin.block-tag-behaviour.carlin` next: its golden
-  carries the same `I'm`, but the case has an unrelated defect (a spurious
-  nested `<p>`), so its golden was left untouched. The S12 ruling applies to it
-  when the real defect is fixed.
+  carries the same `I'm` — under rev. 7 now correct as vendored, no S12 edit
+  pending; the case still has its unrelated defect (a spurious nested `<p>`).
 - `inheritance.extend.include.carlin` — **permanent departure, will never
   pass.** The layout includes `window.carlin`, which declares
   `block window-content`, and the page overrides it: pug allows extending a
