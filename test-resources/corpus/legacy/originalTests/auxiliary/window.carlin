@@ -1,0 +1,4 @@
+
+.window
+  a.close{:href "#"} Close
+  block window-content

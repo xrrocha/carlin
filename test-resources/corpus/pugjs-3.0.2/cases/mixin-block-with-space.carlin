@@ -1,0 +1,6 @@
+mixin m []
+  div
+    block
+
++m
+  | This text should appear

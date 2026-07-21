@@ -1,0 +1,19 @@
+extends ../fixtures/multi-append-prepend-block/redefine.carlin
+
+block append content
+	p.first.append Something appended to content
+
+block prepend content
+	p.first.prepend Something prepended to content
+
+block append content
+	p.last.append Last append must be most last
+
+block prepend content
+	p.last.prepend Last prepend must appear at top
+
+block append head
+	script{:src "jquery.js"}
+
+block prepend head
+	script{:src "foo.js"}

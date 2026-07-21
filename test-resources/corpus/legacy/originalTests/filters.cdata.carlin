@@ -1,0 +1,6 @@
+- (let [users [{"name" "tobi" "age" "2"}]])
+  fb:users
+    each user in users
+      fb:user{:age (:age user)}
+        :cdata
+          #{user.name}

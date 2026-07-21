@@ -1,0 +1,4 @@
+extends ./include-layout.carlin
+
+block include-body
+  .include-body

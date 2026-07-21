@@ -1,0 +1,6 @@
+foo{:attr "<%= bar %>"}
+foo{:class "<%= bar %>"}
+foo{:attr (raw "<%= bar %>")}
+foo{:class (raw "<%= bar %>")}
+foo{:class (raw "<%= bar %> lol rofl")}
+foo{:class (raw "<%= bar %> lol rofl <%= lmao %>")}

@@ -1,0 +1,8 @@
+- (let [crumbs [{"url" "http://www.xyz.com" "name" "xyz"} {"url" "http://www.abc.com" "name" "abc"}]])
+  each [i crumb] in (map-indexed vector crumbs)
+      if (= i 1)
+          a{:href (:url crumb)}
+              span.me-home
+                  |#{(:name crumb)}
+      else
+          a{:href (:url crumb)}

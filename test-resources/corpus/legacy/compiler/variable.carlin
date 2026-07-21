@@ -1,0 +1,4 @@
+div= hallo
+div!= hallo
+div= (:email user)
+div Hi #{(:email user)}

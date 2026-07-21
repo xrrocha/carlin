@@ -1,0 +1,5 @@
+extends _104_layout.carlin
+mixin hello []
+    p hello
+block content
+    +hello

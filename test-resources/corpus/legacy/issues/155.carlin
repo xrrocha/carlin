@@ -1,0 +1,17 @@
+- (let [friends 10])
+  case friends
+      when 0
+          p you have no friends
+      when 1
+          p you have a friend
+      default
+          p you have #{friends} friends
+
+  - (let [tagType "default"])
+    case tagType
+        when "p"
+            p you have no p
+        when "br"
+            p you have a br
+        default
+            p you have a #{tagType} tag

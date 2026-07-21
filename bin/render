@@ -1,0 +1,62 @@
+#!/usr/bin/env bb
+;; bin/render — compile one carlin template and print its HTML rendition.
+;;
+;;   bin/render <file.carlin> [model]
+;;
+;; `model` is optional: a path to an .edn file, or a literal EDN map —
+;;
+;;   bin/render page.carlin
+;;   bin/render page.carlin model.edn
+;;   bin/render page.carlin '{:title "Nihil obstat" :items ["a" "b"]}'
+;;
+;; Includes resolve through the shipped carlin.core/file-resolver (§5.4),
+;; rooted (and jailed) at the template's own directory.
+;; Carlin errors print their positioned message (line, column, caret excerpt)
+;; to stderr and exit 1.
+;;
+;; Works from any CWD: the script locates the repo from its own path.
+
+(require '[babashka.classpath :as cp]
+         '[clojure.java.io :as io]
+         '[clojure.string :as str]
+         '[clojure.edn :as edn])
+
+(def repo-root
+  (-> (io/file *file*) .getAbsoluteFile .getParentFile .getParentFile .getPath))
+
+(cp/add-classpath (str (io/file repo-root "src")))
+
+(require '[carlin.api :as api]
+         '[carlin.core :as core])
+
+(defn- die [code & msg]
+  (binding [*out* *err*] (apply println msg))
+  (System/exit code))
+
+(defn- read-model [arg]
+  (let [m (cond
+            (nil? arg)               {}
+            (.isFile (io/file arg))  (edn/read-string (slurp arg))
+            :else                    (try (edn/read-string arg)
+                                          (catch Exception e
+                                            (die 2 "unreadable model EDN:" (ex-message e)))))]
+    (if (map? m) m (die 2 "model must be an EDN map, got:" (pr-str m)))))
+
+(let [[path model-arg] *command-line-args*]
+  (when-not path
+    (die 2 "usage: render <file.carlin> [model.edn | '{:edn \"map\"}']"))
+  (let [f (io/file path)]
+    (when-not (.isFile f)
+      (die 2 "no such file:" path))
+    (let [root  (-> f .getAbsoluteFile .getParentFile .getPath)
+          model (read-model model-arg)]
+      (try
+        (-> (api/compile-template (slurp f)
+                                  {:name     (.getPath f)
+                                   :resolver (core/file-resolver root)})
+            (api/render model {})
+            println)
+        (catch clojure.lang.ExceptionInfo e
+          (if (:carlin/error (ex-data e))
+            (die 1 (ex-message e))
+            (throw e)))))))

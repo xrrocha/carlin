@@ -1,0 +1,9 @@
+mixin articles []
+    each i in [1 2]
+        h3 Title
+        block
+
++articles
+    button Delete
++articles
+    button Edit

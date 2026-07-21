@@ -1,0 +1,13 @@
+- (let [a "hallo"])
+  case a
+    when "foo"
+      p foo
+    when (str "ha" "llo"): p #{a} welt
+    when "bar"
+      p bar
+    when "hallo"
+      p too late
+
+  case a
+    when "foo": p bar
+    default: p no match

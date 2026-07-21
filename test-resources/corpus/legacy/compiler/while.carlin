@@ -1,0 +1,5 @@
+- (let [a 0])
+  ul
+    while (< a 4)
+      - __CARLIN_TODO__[trailing tokens [('op', '='), ('id', 'a'), ('op', '+'), ('num', '1')]](a = a + 1)
+      li= a

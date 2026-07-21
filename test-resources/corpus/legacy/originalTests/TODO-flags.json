@@ -1,0 +1,32 @@
+[
+ {
+  "file": "attrs.js.jade",
+  "line": 1,
+  "reason": "trailing tokens [('op', '='), ('num', '5')]",
+  "text": "id = 5"
+ },
+ {
+  "file": "attrs.js.jade",
+  "line": 3,
+  "reason": "attr-unparsed",
+  "text": "= '/user/' + id"
+ },
+ {
+  "file": "attrs.js.jade",
+  "line": 3,
+  "reason": "attr-unparsed",
+  "text": "= 'button'"
+ },
+ {
+  "file": "script.whitespace.jade",
+  "line": 2,
+  "reason": "trailing tokens [('op', '{')]",
+  "text": "(foo) {"
+ },
+ {
+  "file": "scripts.jade",
+  "line": 2,
+  "reason": "trailing tokens [('op', '{')]",
+  "text": "(foo) {"
+ }
+]

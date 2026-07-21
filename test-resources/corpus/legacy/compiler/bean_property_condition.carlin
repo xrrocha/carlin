@@ -1,0 +1,14 @@
+div
+  if (= (:name (:level2 bean)) "wrong")
+    div Hmm, strange, my name is
+      span= (:name (:level2 bean))
+  else if (= (:name (:level2 bean)) "beanie")
+    div yes, right, my name is
+      span= (:name (:level2 bean))
+  else
+    div aargghh, nobody nows me.
+  each entry in beans
+    if (= (:name (:level2 entry)) "x")
+      p= (:name (:level2 entry))
+    else
+      p what

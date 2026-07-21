@@ -1,0 +1,5 @@
+
+extends layout.carlin
+
+block prepend head
+  script{:src "app.js"}

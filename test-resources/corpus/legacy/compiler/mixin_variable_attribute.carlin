@@ -1,0 +1,4 @@
+- (let [variable "abc"])
+  mixin link [href name]
+    a{:class (:class attributes) :href href}= name
+  +(link "/foo" "foo"){:class variable}

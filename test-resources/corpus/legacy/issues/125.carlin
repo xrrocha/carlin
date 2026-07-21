@@ -1,0 +1,3 @@
+- (let [list [2 3 4] selectedValue "3a"])
+  each i in list
+      option{:selected (= i selectedValue)}

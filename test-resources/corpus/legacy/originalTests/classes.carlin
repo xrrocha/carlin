@@ -1,0 +1,9 @@
+//a(class=['foo', 'bar', 'baz'])
+
+
+
+a.foo.baz{:class "bar"}
+
+
+
+a.foo-bar_baz

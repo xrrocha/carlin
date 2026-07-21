@@ -1,0 +1,4 @@
+script
+  if __CARLIN_TODO__[trailing tokens [('op', '{')]]((foo) {)
+    bar{};
+  }

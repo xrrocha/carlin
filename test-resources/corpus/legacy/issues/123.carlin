@@ -1,0 +1,5 @@
+extends _123layout
+block append content
+    p.first.append Something appended to content
+block prepend content
+    p.first.prepend Something prepended to content

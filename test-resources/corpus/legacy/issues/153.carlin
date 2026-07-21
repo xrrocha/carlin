@@ -1,0 +1,7 @@
+- (let [books ["A" "B" "C"] foo false bar "test"])
+  each book in books
+      - __CARLIN_TODO__[trailing tokens [('op', '='), ('id', 'true')]](foo = true)
+      - (let [bar "overload"])
+        p= bar
+  p= foo
+  p= bar

@@ -1,0 +1,4 @@
+extends ./layout-with-duplicate-block.carlin
+
+block content
+  div Hello World

@@ -1,0 +1,4 @@
+extends auxiliary/inheritance.extend.mixin.block.carlin
+
+block content
+  p Hello World!

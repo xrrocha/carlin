@@ -1,0 +1,4 @@
+extends /auxiliary/layout.carlin
+
+block content
+    include /auxiliary/include-from-root.carlin

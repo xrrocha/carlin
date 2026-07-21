@@ -1,0 +1,74 @@
+[
+ {
+  "file": "mixin_with_complex_parameter.jade",
+  "line": 13,
+  "reason": "primary? (None, None)",
+  "text": "\"Book\"+"
+ },
+ {
+  "file": "mixin_with_complex_parameter.jade",
+  "line": 14,
+  "reason": "primary? (None, None)",
+  "text": "\"Book \"+"
+ },
+ {
+  "file": "mixin_with_complex_parameter.jade",
+  "line": 15,
+  "reason": "primary? (None, None)",
+  "text": "\"Book \"+"
+ },
+ {
+  "file": "expression_method_invocation_exception.jade",
+  "line": 1,
+  "reason": "method call .get(",
+  "text": "[1,2,3].get(1,2)"
+ },
+ {
+  "file": "while.jade",
+  "line": 4,
+  "reason": "trailing tokens [('op', '='), ('id', 'a'), ('op', '+'), ('num', '1')]",
+  "text": "a = a + 1"
+ },
+ {
+  "file": "plusminus.jade",
+  "line": 11,
+  "reason": "tok@3:';'",
+  "text": "x++;"
+ },
+ {
+  "file": "expression_exception.jade",
+  "line": 1,
+  "reason": "method call .get(",
+  "text": "[1,2,3].get(4)"
+ },
+ {
+  "file": "condition_types.jade",
+  "line": 20,
+  "reason": "method call .size(",
+  "text": "list && list.size() > 0"
+ },
+ {
+  "file": "invalid2.jade",
+  "line": 1,
+  "reason": "tok@43:'\"'",
+  "text": "\"val div(attribute=\"val\" div(attribute=\"val\""
+ },
+ {
+  "file": "mixin_with_conditional.jade",
+  "line": 1,
+  "reason": "trailing tokens [('op', '='), ('str', '\"left\"')]",
+  "text": "alignment = \"left\""
+ },
+ {
+  "file": "exceptions/error.jade",
+  "line": 9,
+  "reason": "method call .query(",
+  "text": "non.existing.query()"
+ },
+ {
+  "file": "errors/tags_with_errors.jade",
+  "line": 1,
+  "reason": "tok@0:'\"alt does '",
+  "text": "\"alt does not fit her"
+ }
+]

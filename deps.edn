@@ -1,0 +1,27 @@
+{:paths ["src"]
+
+ ;; Runtime deps — trajectory (spec Q1/§13): hiccup LEAVES this map once
+ ;; carlin's own serializer lands (zero runtime deps), and edamame ENTERS
+ ;; (or is vendored — spec §13, still open). Until then, the legacy
+ ;; implementation needs hiccup here.
+ :deps {org.clojure/clojure {:mvn/version "1.12.1"}
+        hiccup/hiccup       {:mvn/version "2.0.0"}   ; -> moves to :test with the new serializer
+        borkdude/edamame    {:mvn/version "1.4.28"}} ; entered with the cursor refactor (§13: vendor-vs-depend still open)
+
+ :aliases
+ {;; JVM test classpath + runner. hiccup lives here PERMANENTLY as the
+  ;; differential-test oracle (spec §12.3); test.check for property tests
+  ;; over the escaper and ->js (the "paranoid file", spec §12.2).
+  ;; Run: clojure -X:test  (or -M:test -m cognitect.test-runner)
+  :test {:extra-paths ["test" "test-resources"]
+         :extra-deps  {hiccup/hiccup          {:mvn/version "2.0.0"}
+                       org.clojure/test.check {:mvn/version "1.1.3"}
+                       io.github.cognitect-labs/test-runner
+                       {:git/tag "v0.5.1" :git/sha "dfb30dd"}} ; verify latest tag/sha
+         :main-opts ["-m" "cognitect.test-runner"]
+         :exec-fn   cognitect.test-runner.api/test}
+
+  ;; Opt-in evaluation backend (spec Q1): runtime template compilation on
+  ;; platforms without eval. Kept as a proper k/v ENTRY so uncommenting
+  ;; (removing the #_) restores a valid file.
+  #_#_:sci {:extra-deps {org.babashka/sci {:mvn/version "0.10.47"}}}}}

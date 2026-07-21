@@ -1,0 +1,6 @@
+- (let [steps {:1 "Hi" :2 "abc"}])
+  each [index s] in (map-indexed vector steps)
+      p #{s}-#{index}
+  - (let [steps {:1 "Hi" :2 "abc"}])
+    each [index s] in (map-indexed vector steps)
+        p #{s}-#{index}

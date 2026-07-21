@@ -1,0 +1,30 @@
+- (let [value ""])
+  if true
+    - __CARLIN_TODO__[trailing tokens [('op', '='), ('str', '"Hallo"')]](value = "Hallo")
+  p= value
+
+  - (let [x "A"])
+    each a in ["B" "C"]
+      - __CARLIN_TODO__[trailing tokens [('op', '='), ('id', 'x'), ('op', '+'), ('id', 'a')]](x = x + a)
+    p= x
+
+    mixin test []
+      - (let [x "0"])
+        each f in ["A" "B"]
+          - (let [g (+ x f)])
+            each u in ["C" "D"]
+              - __CARLIN_TODO__[tok@9:';'](g = g + u;)
+              - __CARLIN_TODO__[tok@9:';'](x = x + g;)
+            p= g
+        p= x
+        p= g
+
+    +test
+
+    - (let [p1 "0"])
+      each x1 in ["A"]
+        each y1 in ["B"]
+          each z1 in ["C"]
+            - __CARLIN_TODO__[tok@21:';'](p1 = p1+ x1 + y1 + z1;)
+      p= p1
+

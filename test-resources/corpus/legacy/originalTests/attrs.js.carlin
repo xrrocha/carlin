@@ -1,0 +1,3 @@
+- __CARLIN_TODO__[trailing tokens [('op', '='), ('num', '5')]](id = 5)
+a{:href (str "/user/" id) :class "button"}
+a{:href true __CARLIN_TODO__[attr-unparsed](= '/user/' + id) :class true __CARLIN_TODO__[attr-unparsed](= 'button')}

@@ -1,0 +1,4 @@
+extends layout.carlin
+
+block a
+    p Other A

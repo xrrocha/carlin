@@ -1,0 +1,36 @@
+a{:href "/contact"} contact
+a.button{:href "/save"} save
+a{:foo true :bar true :baz true}
+a{:foo "foo, bar, baz" :bar 1}
+a{:foo "((foo))" :bar (if 1 1 0)}
+select
+  option{:value "foo" :selected true} Foo
+  option{:selected true :value "bar"} Bar
+a{:foo "class:"}
+input{:pattern "\\S+"}
+
+a{:href "/contact"} contact
+a.button{:href "/save"} save
+a{:foo true :bar true :baz true}
+a{:foo "foo, bar, baz" :bar 1}
+a{:foo "((foo))" :bar (if 1 1 0)}
+select
+  option{:value "foo" :selected true} Foo
+  option{:selected true :value "bar"} Bar
+a{:foo "class:"}
+input{:pattern "\\S+"}
+foo{:terse "true"}
+foo{:date "1970-01-01T00:00:00.001Z"}
+
+foo{:abc true :def true}
+foo{:abc true :def true}
+foo{:abc true :def true}
+foo{:abc true :def true}
+foo{:abc true :def true}
+foo{:abc true :def true}
+
+- (let [attrs {:foo "bar" :bar "<baz>"}])
+  div&attributes attrs
+
+  a{:foo "foo" "bar" "bar"}
+  a{:foo "foo" "bar" "bar"}

@@ -1,0 +1,10 @@
+mixin book [name price]
+  p #{name}: #{price}€
+
+- (let [title "Book A" letter "A" price 20 foo {"bar" "1"} soldout true])
+  +(book "Book A" 1.3)
+  +(book title "2,00")
+  +(book "Book,A" price)
+  +(book __CARLIN_TODO__[primary? (None, None)]("Book"+) ",A" (not soldout))
+  +(book __CARLIN_TODO__[primary? (None, None)]("Book "+) letter (str (:bar foo) ",00"))
+  +(book __CARLIN_TODO__[primary? (None, None)]("Book "+) letter (:bar foo))

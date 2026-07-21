@@ -1,0 +1,15 @@
+mixin foo []
+  p.bar&attributes attributes One
+  p.baz.quux&attributes attributes Two
+  p&attributes attributes Three
+  p.bar{:class "baz"}&attributes attributes Four
+  p.baz{:class (+ 2 3)}&attributes attributes Five
+
+body
+  +foo.hello
+  +foo#world
+  +foo.hello#world
+  +foo.hello.world
+  +foo{:class "hello"}
+  +foo.hello{:class "world"}
+  +foo

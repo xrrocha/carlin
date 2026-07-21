@@ -1,0 +1,8 @@
+a{:href "/contact"} contact
+a.button{:href "/save"} save
+ a{:foo true :bar true :baz true}
+a{:foo "foo, bar, baz" :bar 1}
+ a{:foo "((foo))" :bar (if (= 1 1) 1 0)}
+select
+  option{:value "foo" :selected true} Foo
+  option{:selected true :value "bar"} Bar

@@ -1,0 +1,32 @@
+.data
+  ol.sortable#contents
+    each item in report
+      if (not (:parent item))
+        div
+          li.chapter{:data-ref (:id item)}
+            a{:href (str "/admin/report/detail/" (:id item))}
+              = (:name item)
+          - (let [chp (:id item)])
+              ol.sortable
+                each item in report
+                  if (and (= (:parent item) chp) (= (:type item) "section"))
+                    div
+                      li.section{:data-ref (:id item)}
+                        a{:href (str "/admin/report/detail/" (:id item))}
+                          = (:name item)
+                      - (let [sec (:id item)])
+                          ol.sortable
+                            each item in report
+                              if (and (= (:parent item) sec) (= (:type item) "page"))
+                                div
+                                  li.page{:data-ref (:id item)}
+                                    a{:href (str "/admin/report/detail/" (:id item))}
+                                      = (:name item)
+                                  - (let [page (:id item)])
+                                      ol.sortable
+                                        each item in report
+                                          if (and (= (:parent item) page) (= (:type item) "subpage"))
+                                            div
+                                              li.subpage{:data-ref (:id item)}
+                                                a{:href (str "/admin/report/detail/" (:id item))}
+                                                  = (:name item)

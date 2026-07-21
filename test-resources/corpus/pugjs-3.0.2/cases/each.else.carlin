@@ -1,0 +1,38 @@
+
+- (let [users []])
+  ul
+    each user in users
+      li= (:name user)
+    else
+      li no users!
+
+
+  - (let [users [{:name "tobi" :friends ["loki"]} {:name "loki"}]])
+    if users
+      ul
+        each user in users
+          li= (:name user)
+        else
+          li no users!
+
+    - (let [user {:name "tobi" :age 10}])
+      ul
+        each [key val] in user
+          li #{key}: #{val}
+        else
+          li user has no details!
+
+      - (let [user {}])
+        ul
+          each [key prop] in user
+            li #{key}: #{val}
+          else
+            li user has no details!
+
+        - (let [user {:name "tobi"}])
+
+          ul
+            each [key val] in user
+              li #{key}: #{val}
+            else
+              li user has no details!

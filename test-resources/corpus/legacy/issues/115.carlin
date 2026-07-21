@@ -1,0 +1,7 @@
+doctype html
+html
+  head
+    title test
+  body
+    - (let [steps {:1 "one" :2 "two"}])
+      p&attributes steps ok

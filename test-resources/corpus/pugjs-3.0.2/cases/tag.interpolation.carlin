@@ -1,0 +1,24 @@
+//- carlin departure (logged in README): mixin hoisted out of the `- let`
+//- body — definitions are top-level only (Q10); the omitted call argument
+//- is an explicit nil — arity is exact (spec §3.13)
+mixin item [icon]
+  li
+    if (:href attributes)
+      a&attributes attributes
+        img.icon{:src icon}
+        block
+    else
+      span&attributes attributes
+        img.icon{:src icon}
+        block
+
+- (let [tag "p" foo "bar"])
+  #{tag} value
+  #{tag}{:foo "bar"} value
+  #{(if foo "a" "li")}{:something true} here
+
+  ul
+    +(item "contact")
+      | Contact
+    +(item nil){:href "/contact"}
+      | Contact

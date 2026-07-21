@@ -1,0 +1,53 @@
+mixin centered [title]
+  div.centered{:id (:id attributes)}
+    - (if title)
+      h1{:class (:class attributes)}= title
+    block
+    - (if (:href attributes))
+      .footer
+        a{:href (:href attributes)} Back
+
+mixin main [title]
+  div.stretch
+    +(centered title).highlight&attributes attributes
+      block
+
+mixin bottom []
+  div.bottom&attributes attributes
+    block
+
+body
+  +(centered "Hello World")#First
+  +(centered "Section 1")#Second
+    p Some important content.
+  +(centered "Section 2")#Third.foo{:href "menu.html" :class "bar"}
+    p Even more important content.
+  +(main "Section 3"){:href "#"}
+    p Last content.
+  +bottom.foo{:class "bar" :name "end" :id "Last" :data-attr "baz"}
+    p Some final words.
+  +bottom{:class ["class1" "class2"]}
+
+//- carlin departure (logged in README): mixin defs hoisted out of the
+//- `- let` body below — definitions are top-level only (Q10)
+mixin foo []
+  div.thing{:attr1 "foo" :attr2 "bar"}&attributes attributes
+
+mixin work_filmstrip_item [work]
+  div&attributes attributes= work
+
+mixin my-mixin [arg1 arg2 arg3 arg4]
+  p= arg1
+  p= arg2
+  p= arg3
+  p= arg4
+
+- (let [val "<biz>" classes ["foo" "bar"]])
+  +foo.thunk{:attr3 "baz" :data-foo val :data-bar (raw val) :class classes}
+
+  //- Regression test for #1424
+  +(work_filmstrip_item "work"){"data-profile" "profile" "data-creator-name" "name"}
+
+  +foo{:attr3 "qux" :class "baz"}
+
+  +(my-mixin "1" "2" "3" "4")

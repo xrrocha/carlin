@@ -1,0 +1,12 @@
+- (let [error true])
+  input.ap-input--ok1
+  input{:class "ap-input--ok2"}
+  input{:class (if error "ap-input--error1" "")}
+  input{:class (if (= error false) "ap-input--error2" "")}
+  input{:class (str (if error "ap-input--error3" ""))}
+
+  - (let [x 1])
+    ul
+      while (< x 10)
+        - __CARLIN_TODO__[tok@3:';'](x++;)
+        li= x

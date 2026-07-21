@@ -1,0 +1,6 @@
+
+extends window.carlin
+
+block window-content
+  .dialog
+    block content

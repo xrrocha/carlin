@@ -1,0 +1,4 @@
+extends ./layout.carlin
+
+block shadowed
+  // index.pug: shadowed

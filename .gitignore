@@ -1,0 +1,12 @@
+._*
+.clj-kondo/
+.cpcache/
+.DS_Store
+.lein-repl-history
+.local/
+.lsp/
+.nrepl-port
+.rebel_readline_history
+.*.sw?
+target/
+test-fixtures/

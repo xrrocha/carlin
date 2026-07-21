@@ -1,0 +1,3 @@
+extends layout.with.runtime.error.carlin
+block content
+  | some content

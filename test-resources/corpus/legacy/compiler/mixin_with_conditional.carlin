@@ -1,0 +1,8 @@
+- __CARLIN_TODO__[trailing tokens [('op', '='), ('str', '"left"')]](alignment = "left")
+mixin alignConditional []
+  if alignment
+    .wrapper.conditional
+      block
+
++alignConditional
+  label= "another nested label"

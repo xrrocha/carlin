@@ -1,0 +1,13 @@
+mixin testMixin []
+  h1.test&attributes attributes
+
+- (let [foo "qux" bar "quux" foobar "#{foo}-#{bar}" foobar2 (str foo "-" bar) foobar3 __CARLIN_TODO__[method call .toString(](foo.toString() + "-" + bar.toString()) foobarbaz "foobarbaz"])
+  +testMixin{:class (str foobar)}
+  +testMixin{:class foobar}
+  +testMixin{:class (str foobar2)}
+  +testMixin{:class foobar2}
+  +testMixin{:class (str foobar3)}
+  +testMixin{:class foobar3}
+  +testMixin{:class (str foo "-" bar)}
+  +testMixin{:class (str foobarbaz)}
+  +testMixin{:class foobarbaz}

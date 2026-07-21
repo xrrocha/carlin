@@ -1,0 +1,13 @@
+- (let [foo true bar false])
+  a{:data-test true}
+  a{:data-test false}
+  a{:data-test foo}
+  a{:data-test bar}
+  a{:data-test ""}
+  a{:data-test "test"}
+  a{:test true}
+  a{:test false}
+  a{:test foo}
+  a{:test bar}
+  a{:test ""}
+  a{:test "test"}

@@ -1,0 +1,3 @@
+each data of users
+  li= (get data 0)
+  li= (get data 1)

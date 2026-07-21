@@ -1,0 +1,2 @@
+- (let [fun __CARLIN_TODO__[trailing tokens [('op', '{'), ('id', 'return'), ('id', 'x'), ('op', '+'), ('id', 'y'), ('op', '}')]](function(x, y) { return x + y })])
+  p= (fun 1 3)

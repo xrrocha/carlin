@@ -1,0 +1,9 @@
+p= nil
+p= nil
+p= ""
+p= 0
+p= false
+p{:foo nil}
+p{:foo ""}
+p{:foo 0}
+p{:foo false}

@@ -1,0 +1,30 @@
+
+- (let [items [1 2 3]])
+  ul
+    each item in items
+      li= item
+
+  - (let [items [1 2 3]])
+    ul
+      each [i item] in (map-indexed vector items)
+        li{:class (str "item-" i)}= item
+
+    ul
+      each [i item] in (map-indexed vector items)
+        li= item
+
+    ul
+      each $item in items
+        li= $item
+
+    - (let [nums [1 2 3] letters ["a" "b" "c"]])
+      ul
+        each l in letters
+          each n in nums
+            li #{n}: #{l}
+
+      - (let [count (atom 0)
+              counter (fn [] [(swap! count inc) (swap! count inc) (swap! count inc)])])
+        ul
+          each n in (counter)
+            li #{n}

@@ -1,0 +1,21 @@
+{:paths ["src" "test"]  ; no "." — corpus & manifest are read as files, not off the classpath
+ :tasks
+ {ratchet    {:doc "Run the golden corpus against the manifest; fail on regression"
+              :requires ([carlin.harness :as h])
+              :task (h/ratchet)}
+  baseline   {:doc "Rewrite conformance-manifest.edn from current reality"
+              :requires ([carlin.harness :as h])
+              :task (h/baseline)}
+  show       {:doc "Show one case's diff: bb show <case>.carlin"
+              :requires ([carlin.harness :as h])
+              :task (h/show (first *command-line-args*))}
+  spec-tests {:doc "Run spec-derived unit suites (red until carlin.core/runtime land)"
+              :requires ([clojure.test :as t]
+                         [carlin.escaper-test] [carlin.merge-attrs-test]
+                         [carlin.to-js-test] [carlin.resolver-test]
+                         [carlin.diagnostics-test])
+              :task (do (t/run-tests 'carlin.escaper-test 'carlin.merge-attrs-test
+                                     'carlin.to-js-test 'carlin.resolver-test
+                                     'carlin.diagnostics-test)
+                        (println "\n(spec suites are informational until the implementation lands;"
+                                 "the CI gate is `bb ratchet`)"))}}}

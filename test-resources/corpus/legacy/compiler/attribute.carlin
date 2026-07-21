@@ -1,0 +1,22 @@
+p{:hello "worl\"d" :data-a "b"}
+p{:hello "worl'd" :a (:b a)}
+input{:checked true}
+input{:checked "true"}
+input{:checked false}
+input{:checked "false"}
+input{:value hello}
+input{:value (str hello)}
+input.hallo{:class "welt"}
+input.hello{:class hello}
+input{:value (str "hello " hello)}
+input{:value (str "hello " hello "!")}
+p{:hello "hello" :world "world"}
+p{:hello "hello" :world "world"}
+p{:hello (str "hello" "world") :class "foo"}
+p{:hello (str "hello" "world") :class "foo"}
+p{:hello (str "hello" "world") :class "foo"}
+p{:hello "hello" :world "world"}
+p{:hello (str "hello" "world") :class "foo"}
+p{"hello" "hello" :class "foo"}
+p{"hello" "hello" "world" true :class "foo"}
+p{"hell" true}

@@ -1,0 +1,6 @@
+extends ./base.carlin
+
+block root
+  // layout.pug: root
+  block shadowed
+    // layout.pug: shadowed

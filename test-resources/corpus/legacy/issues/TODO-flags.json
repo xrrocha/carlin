@@ -1,0 +1,74 @@
+[
+ {
+  "file": "153.jade",
+  "line": 5,
+  "reason": "trailing tokens [('op', '='), ('id', 'true')]",
+  "text": "foo = true"
+ },
+ {
+  "file": "191.jade",
+  "line": 3,
+  "reason": "trailing tokens [('op', '='), ('str', '\"Hallo\"')]",
+  "text": "value = \"Hallo\""
+ },
+ {
+  "file": "191.jade",
+  "line": 8,
+  "reason": "trailing tokens [('op', '='), ('id', 'x'), ('op', '+'), ('id', 'a')]",
+  "text": "x = x + a"
+ },
+ {
+  "file": "191.jade",
+  "line": 16,
+  "reason": "tok@9:';'",
+  "text": "g = g + u;"
+ },
+ {
+  "file": "191.jade",
+  "line": 17,
+  "reason": "tok@9:';'",
+  "text": "x = x + g;"
+ },
+ {
+  "file": "191.jade",
+  "line": 28,
+  "reason": "tok@21:';'",
+  "text": "p1 = p1+ x1 + y1 + z1;"
+ },
+ {
+  "file": "195.jade",
+  "line": 1,
+  "reason": "trailing tokens [('op', '='), ('num', '1')]",
+  "text": "test = 1"
+ },
+ {
+  "file": "176.jade",
+  "line": 1,
+  "reason": "method call .money(",
+  "text": "format.money(14.0)"
+ },
+ {
+  "file": "176.jade",
+  "line": 2,
+  "reason": "method call .money(",
+  "text": "format.money(14.1)"
+ },
+ {
+  "file": "194.jade",
+  "line": 1,
+  "reason": "trailing tokens [('op', '{'), ('id', 'return'), ('id', 'x'), ('op', '+'), ('id', 'y'), ('op', '}')]",
+  "text": "function(x, y) { return x + y }"
+ },
+ {
+  "file": "131.jade",
+  "line": 8,
+  "reason": "method call .toString(",
+  "text": "foo.toString() + \"-\" + bar.toString()"
+ },
+ {
+  "file": "143.jade",
+  "line": 3,
+  "reason": "tok@99:'\"'",
+  "text": "Source+Sans+Pro:400,600,700,300,900italic,700italic,900,600italic,400italic,300italic,200italic,200\""
+ }
+]

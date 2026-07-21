@@ -1,0 +1,10 @@
+doctype html
+html
+  body
+   - (let [s "this"])
+     case s
+       //- Comment
+       when "this"
+         p It's this!
+       when "that"
+         p It's that!

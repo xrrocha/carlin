@@ -1,0 +1,7 @@
+- (let [user {:name "tobi"}])
+  foo{:data-user user}
+  foo{:data-items [1 2 3]}
+  foo{:data-username "tobi"}
+  foo{:data-escaped {:message "Let's rock!"}}
+  foo{:data-ampersand {:message "a quote: &quot; this & that"}}
+  foo{:data-epoc "1970-01-01T00:00:00.001Z"}

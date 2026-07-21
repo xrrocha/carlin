@@ -1,0 +1,8 @@
+doctype html
+- (let [check true])
+  a{:checked check}
+      |Text
+  br
+  - (let [check false])
+    a{:checked check}
+        |Text

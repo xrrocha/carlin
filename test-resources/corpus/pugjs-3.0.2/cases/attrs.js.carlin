@@ -1,0 +1,17 @@
+- (let [id 5
+        answer (fn [] 42)])
+  a{:href (str "/user/" id) :class "button"}
+  a{:href (str "/user/" id) :class "button"}
+  meta{:key "answer" :value (answer)}
+  a{:class ["class1" "class2"]}
+  a.tag-class{:class ["class1" "class2"]}
+
+  a{:href (str "/user/" id) :class "button"}
+  a{:href (str "/user/" id) :class "button"}
+  meta{:key "answer" :value (answer)}
+  a{:class ["class1" "class2"]}
+  a.tag-class{:class ["class1" "class2"]}
+
+  div{:id id}&attributes {:foo "bar"}
+  - (let [bar nil])
+    div{:foo nil :bar bar}&attributes {:baz "baz"}
