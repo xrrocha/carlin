@@ -589,12 +589,99 @@
 
 (defn- comment? [n] (#{:comment :comment-silent} (:type n)))
 
+;; ---------------------------------------------------------------------------
+;; inline `#[...]` fragments (S27): parsed at parse time so the checks see them
+
+(defn matching-bracket
+  "Index of the ] closing an already-open [ at the front of s. STRING-AWARE:
+  a bracket inside a double-quoted Clojure string literal is content —
+  `#[- (let [foo \"foo]\"])]` closes at the last ], not inside the string
+  (the rev. 13 species, one position over: a bare scan meeting reader
+  syntax must know the reader's strings).
+
+  Lives here rather than in codegen because BOTH halves of the pipeline
+  need it now (S27): codegen to render `#[…]`, and the parse-time hoist
+  below to see inside it. One scanner, one definition."
+  [^String s]
+  (loop [i 0, depth 0, in-str? false]
+    (when (< i (count s))
+      (let [c (nth s i)]
+        (cond
+          in-str?  (cond
+                     (= c \\) (recur (+ i 2) depth true)     ; escape: skip next
+                     (= c \") (recur (inc i) depth false)
+                     :else    (recur (inc i) depth true))
+          (= c \") (recur (inc i) depth true)
+          (= c \[) (recur (inc i) (inc depth) false)
+          (= c \]) (if (zero? depth) i (recur (inc i) (dec depth) false))
+          :else    (recur (inc i) depth false))))))
+
+(defn parse-inline-fragment
+  "Parse a single-line fragment — the inside of #[tag …] interpolation
+  (§3.3) — into one node. Used by codegen; positions are fragment-local."
+  [text]
+  (:node (classify-line (cur/make text "<fragment>") 1 0 1)))
+
+(defn inline-fragments
+  "Every `#[…]` fragment in `text`, parsed, in source order — including
+  fragments nested inside other fragments' inline text.
+
+  S27: a `#[…]` interior is a genuine node tree that, until now, no
+  tree-walking check could see, because it stayed an opaque string until
+  codegen re-parsed it. Hoisting the fragments at parse time puts them in
+  reach of the whole check battery (arity today; :nested-mixin,
+  :yield-children, :default-not-last and every future check for free)
+  rather than teaching each check to re-scan text one position at a time —
+  the rev. 13 lesson applied to the class instead of the instance.
+
+  Rendering still re-parses in codegen: this walk exists to be CHECKED, not
+  to be emitted, so the render path is untouched and cannot drift in
+  output. Unterminated `#[` is left alone here — codegen raises it with the
+  position it already knows."
+  [text]
+  (when (string? text)
+    (loop [s text, out []]
+      (if-let [i (str/index-of s "#[")]
+        (if (and (pos? i) (= \\ (nth s (dec i))))
+          (recur (subs s (+ i 2)) out)                ; \-escaped: not a fragment
+          (let [after (subs s (+ i 2))]
+            (if-let [j (matching-bracket after)]
+              (let [inner (subs after 0 j)
+                    node  (try (parse-inline-fragment inner)
+                               (catch #?(:clj Exception :cljs :default) _ nil))]
+                (recur (subs after (inc j))
+                       (cond-> out node (conj node))))
+              out)))                                   ; unterminated: codegen's to report
+        out))))
+
 (defn- node-kids
-  "A node's structural descendants for walking purposes: tree children plus
-  the `: `-expanded head, which is a real node wherever it appears."
+  "A node's structural descendants for walking purposes: tree children, the
+  `: `-expanded head (a real node wherever it appears), and — S27 — every
+  `#[…]` fragment interpolated into any of the node's text-bearing
+  positions.
+
+  The interpolated positions mirror codegen's `scan-text` call sites exactly:
+  :inline-text (tag and mixin-call tails), :text (text and literal-markup
+  lines), the captured :dot-block/:text, and a :text-block's :body/:text.
+
+  :body is read ONLY for :text-block. A comment and a filter carry their
+  captured body under the same key, and neither interpolates — comment
+  bodies emit raw, filters run before the model exists — so hoisting from
+  them would invent calls that never render and fail templates that are
+  legal. (Same key, three meanings: the sentinel-collision species again,
+  in its structural costume.)
+
+  Adding them HERE, at the walk's single child accessor, is what makes the
+  fix structural: every check that already walks the tree — and every check
+  added later — sees inside `#[…]` without knowing the fragments exist."
   [n]
   (cond-> (:children n)
-    (:expanded n) (concat [(:expanded n)])))
+    (:expanded n) (concat [(:expanded n)])
+    true          (concat (mapcat inline-fragments
+                                  (cond-> [(:inline-text n) (:text n)
+                                           (:text (:dot-block n))]
+                                    (= :text-block (:type n))
+                                    (conj (:text (:body n))))))))
 
 (defn- check-extends [cursor roots]
   (let [meaningful (remove comment? roots)]
@@ -1010,11 +1097,6 @@
            [] nodes))]
     (attach nodes)))
 
-(defn parse-inline-fragment
-  "Parse a single-line fragment — the inside of #[tag …] interpolation
-  (§3.3) — into one node. Used by codegen; positions are fragment-local."
-  [text]
-  (:node (classify-line (cur/make text "<fragment>") 1 0 1)))
 
 ;; ---------------------------------------------------------------------------
 ;; entry point

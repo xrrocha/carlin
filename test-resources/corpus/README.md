@@ -314,3 +314,23 @@ golden file and logging the departure, never by silently matching pug.
   item, retired as fruitless in rev. 12, turns out to have been retired one
   case too early — it was fruitless only for the cases then measured.
   Ricardo-ratified (S26), 2026-07-22.
+- **`mixin.inline` added (S27/S28) — a NEW carlin-authored case, not a
+  morphed pug original.** The corpus had no case exercising a mixin call in
+  inline `#[…]` position with a *bare* name, so a real bug lived there
+  undisturbed: `#[+m "arg"]` compiled clean and died at runtime with an
+  unclassified sci `ArityException`, while the identical call at line
+  position gave a positioned `:mixin-arity` at compile time. Cause was
+  structural — a `#[…]` interior stayed an opaque string until codegen
+  re-parsed it, so no tree-walking check could see inside it.
+  `core/inline-fragments` now hoists those fragments at parse time and
+  `node-kids` walks them, which puts inline position in reach of the entire
+  check battery at once rather than teaching arity alone to re-scan text.
+  The five spellings in the case (bare-with-text, bare-no-args, paren args,
+  paren args *plus* inline text, and shorthand-with-text) were each probed
+  against pug 3.0.2 and the golden generated from that run at
+  `pretty:false` — carlin matched byte-for-byte on the first execution,
+  quotes-as-literal-characters included. S28 ratifies the semantics the
+  parser already had: a bare name followed by inline text passes NO
+  argument, and the text becomes the mixin's block content, exactly as at
+  line position and exactly as pug does. Ricardo-ratified (S27 option (a),
+  S28), 2026-07-22.

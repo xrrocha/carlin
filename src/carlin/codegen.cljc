@@ -46,25 +46,12 @@
       (+ (reduce + (map #(inc (count %)) (take (dec end-line) lines)))
          (dec end-col)))))
 
-(defn- matching-bracket
-  "Index of the ] closing an already-open [ at the front of s. STRING-AWARE:
-  a bracket inside a double-quoted Clojure string literal is content —
-  `#[- (let [foo \"foo]\"])]` closes at the last ], not inside the string
-  (the rev. 13 species, one position over: a bare scan meeting reader
-  syntax must know the reader's strings)."
-  [^String s]
-  (loop [i 0, depth 0, in-str? false]
-    (when (< i (count s))
-      (let [c (nth s i)]
-        (cond
-          in-str?  (cond
-                     (= c \\) (recur (+ i 2) depth true)     ; escape: skip next
-                     (= c \") (recur (inc i) depth false)
-                     :else    (recur (inc i) depth true))
-          (= c \") (recur (inc i) depth true)
-          (= c \[) (recur (inc i) (inc depth) false)
-          (= c \]) (if (zero? depth) i (recur (inc i) (dec depth) false))
-          :else    (recur (inc i) depth false))))))
+(def ^:private matching-bracket
+  "Index of the ] closing an already-open [ at the front of s. STRING-AWARE.
+  Moved to carlin.core at S27 so the parse-time fragment hoist and this
+  render path share ONE scanner; kept here as an alias so the reading order
+  of this namespace survives."
+  core/matching-bracket)
 
 (defn- scan-text
   "Text → pieces: strings | {:expr form} | {:raw form} | {:node n}.

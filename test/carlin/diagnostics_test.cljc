@@ -78,6 +78,30 @@
     (is (classed? (err "div\n  mixin f [x]\n    p= x") :nested-mixin)))
   (testing "mixin arity mismatch, compile time (§3.13 D11)"
     (is (classed? (err "mixin card [t]\n  p= t\n+(card 1 2 3)") :mixin-arity)))
+  (testing "S27: the check battery reaches INSIDE #[…] interpolation"
+    ;; Before S27 each of these compiled clean and died at runtime as an
+    ;; unclassified sci ArityException — the fragment was an opaque string
+    ;; until codegen re-parsed it, so no tree walk could see the call.
+    ;; Hoisting fragments at parse time is what makes these positioned.
+    (testing "too many args, inline position"
+      (is (classed? (err "mixin card [t]\n  p= t\np x #[+(card 1 2 3)] y")
+                    :mixin-arity)))
+    (testing "too few args, inline position — the S28 spelling with a\n             mixin that actually takes one"
+      (is (classed? (err "mixin card [t]\n  p= t\np x #[+card \"text\"] y")
+                    :mixin-arity)))
+    (testing "inside a fragment nested in another fragment's inline text"
+      (is (classed? (err "mixin card [t]\n  p= t\np x #[b deep #[+(card 1 2)] out] y")
+                    :mixin-arity)))
+    (testing "inside a dot block's captured body"
+      (is (classed? (err "mixin card [t]\n  p= t\np.\n  line #[+(card 1 2)] end")
+                    :mixin-arity)))
+    (testing "inside a tagless text block's captured body"
+      (is (classed? (err "mixin card [t]\n  p= t\n.\n  line #[+(card 1 2)] end")
+                    :mixin-arity)))
+    (testing "a check OTHER than arity also reaches inline — the point of\n             fixing the class rather than the instance"
+      (is (classed? (err "p x #[div: yield] y") :yield-outside-include)))
+    (testing "but NOT bodies that never interpolate: a comment body emits\n             raw and a filter runs before the model exists, so an arity\n             error written there is not a call and must not fail the build"
+      (is (nil? (err "mixin card [t]\n  p= t\n//\n  line #[+(card 1 2)] end")))))
   (testing "case: default not last (§3.7)"
     (is (classed? (err "case x\n  default\n    p d\n  when 1\n    p one") :default-not-last)))
   (testing "static attr conflict under :error (§4.6)"

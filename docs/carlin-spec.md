@@ -1290,3 +1290,54 @@ Two further findings, both recorded as law:
   corrected. **A pin is only as good as its probe**: an unprobed assertion
   is a hypothesis wearing a test's clothes, and it will eventually contradict
   a correct implementation with all the authority of a regression.
+
+**Revision note (rev. 14).** One structural fix and one ratification, both
+concerning inline `#[…]` interpolation (§3.3, §3.13).
+
+- **Checks reach inside `#[…]`** (S27, option (a) ruled). A fragment's
+  interior was, until now, invisible to every structural check: it stayed an
+  opaque string through parsing and was only re-parsed inside codegen's
+  `scan-text`, long after the check battery had run. The measurable symptom
+  was arity — `+(m)` at line position gave a positioned `:mixin-arity` at
+  compile time, while `p x #[+(m)] y` compiled clean and died at *runtime*
+  with an unclassified sci `ArityException` carrying no position at all. But
+  arity was only the instance the corpus happened to expose; `:nested-mixin`,
+  `:yield-children`, `:default-not-last` and every check yet to be written
+  were equally blind there.
+
+  `core/inline-fragments` now parses every `#[…]` fragment at parse time —
+  including fragments nested inside other fragments — and `node-kids`, the
+  walk's single child accessor, yields them alongside a node's real
+  children. The check battery therefore reaches inline position without any
+  individual check knowing that fragments exist, and every check added later
+  inherits the coverage for free. The render path is deliberately untouched:
+  codegen still re-parses when it emits, so this hoist can never change
+  output, only diagnose it. `matching-bracket` moved to `carlin.core` so
+  both halves of the pipeline share one scanner rather than two that can
+  drift.
+
+  The interpolated positions are exactly codegen's `scan-text` call sites:
+  `:inline-text`, `:text`, a dot block's `:dot-block/:text`, and a
+  `:text-block`'s `:body/:text`. That last one is read *only* for
+  `:text-block`: comments and filters carry their captured body under the
+  same `:body` key and neither interpolates — comment bodies emit raw,
+  filters run before the model exists — so hoisting from them would invent
+  calls that never render and fail templates that are perfectly legal. Same
+  key, three meanings; the sentinel-collision species (rev. 12) wearing a
+  structural costume, and caught this time by a pin that asserted the
+  non-interpolating bodies stay silent.
+
+- **Bare mixin name plus inline text, inline** (S28, ratified). Inside
+  `#[…]`, `+name text` passes **no argument**: the trailing text becomes the
+  mixin's block content, `:argc` is 0, and arity is checked against that.
+  This is not new law so much as the recognition that existing law already
+  covered the position — the parser had read it this way all along, it
+  matches line position (`+box Some text`), and it matches pug 3.0.2, whose
+  output carries the quotes through as literal characters. Only the gate was
+  missing. Pinned by `mixin.inline`, whose golden was generated from pug and
+  matched byte-for-byte on first execution.
+
+**A frontier of zero reds is a statement about the corpus, not about the
+language.** Six inline spellings worked with no case exercising any of them,
+and a seventh was broken with none exercising it either. The corpus measures
+what it contains.

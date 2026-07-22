@@ -1,0 +1,17 @@
+mixin box []
+  div
+    block
+
+mixin plain []
+  hr
+
+mixin card [title]
+  section
+    h1= title
+    block
+
+p Text #[+box "the text"] tail
+p Empty #[+plain] tail
+p Args #[+(card "Heading")] tail
+p Both #[+(card "Heading") "body text"] tail
+p Shorthand #[+box.cls "classy"] tail
