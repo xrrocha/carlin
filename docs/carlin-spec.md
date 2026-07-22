@@ -188,7 +188,11 @@ input{:type  "text"
 - **String keys** are legal map keys for exotic attribute names:
   `{"(click)" "handler()"}`.
 - **`&attributes expr`** after the map: any expression evaluating to a map,
-  merged per §4.6.
+  merged per §4.6. A **bare symbol is a name token** (word characters), not a
+  reader form — so a trailing `=`/`!=` is a buffered-content sigil, exactly as
+  in a bare mixin call (§3.13): `div&attributes attributes= x` forwards
+  `attributes` and buffers `x`. Delimited forms (`(…)`, `{…}`, `[…]`) are read
+  by the reader, which is authoritative for its own delimiters.
 - **Unescaped values**: there is **no `key!=` syntax**. Wrap the value in the raw
   marker: `a{:href (raw pre-escaped)}`. Attribute values are arbitrary
   expressions, so the capability falls out of the runtime; `(raw …)` is itself
@@ -1011,3 +1015,56 @@ remaining mismatch is a content difference (the largest: pug's tagless
 lone-dot text block, which carlin misparses as an empty div shorthand). The
 plan item is retired; §10's `pretty` exclusion stands with its conformance
 irrelevance now *measured* rather than assumed.
+
+**Revision note (rev. 8).** Rev. 7's first two rulings are enforced; one
+design position is recorded; one parser bug — of a familiar species — is
+fixed; and the docket reopens.
+
+- **The template namespace is a design position, not a convenience** (S15,
+  §8.2). Template expressions resolve and evaluate against a dedicated
+  namespace: clojure.core plus exactly `raw` and `->js`, referred from
+  `carlin.runtime`. `evaluate` binds `*ns*` to it; `known-symbol?` resolves
+  against it — analysis and evaluation agree *by construction*, which is the
+  point. The alternative (codegen rewriting of reserved-ish symbols) was
+  rejected: ambient vocabulary belongs to namespace mechanics, user names stay
+  user data (rev. 4 hygiene), lexical shadowing keeps working, and templates
+  stop resolving against whatever `*ns*` the caller happened to be in. Any sci
+  or CLJS strategy must expose the same two names, or the platforms drift.
+- **Ruling 2 enforced** (§3.5, §6.3): collection attribute values are JSON.
+  The seam is the serializer's `attr-value-str`: `:style` maps keep CSS
+  rendering; every other map or collection goes `->js` first, attribute
+  escaper second — the pipeline order that produces the `&quot;` shape.
+  `->js` now **rejects the raw marker explicitly** (`:unsupported-js-value`):
+  a Raw is a record, records are maps, and it would otherwise have sailed
+  down the `map?` branch and JSON-encoded as `{"s":…}` — the fourth sighting
+  of that trap, and the first caught before the bug rather than after.
+- **Ruling 3 enforced** (§4.6): class accumulation order is textual source
+  order. The fix is one recorded integer plus one transform: the parser
+  already *saw* where the attrs map sat among the shorthand classes and now
+  records it (`:classes-before-attrs`); a codegen transform
+  (`thread-class-order`) splits the shorthands around the map's position and
+  folds the trailing ones after the map's own `:class` value, applied at the
+  top of both tag and mixin-call codegen so every downstream consumer sees
+  the threaded node. No new machinery — `class-tokens`' recursive flatten
+  does the rest. The lesson generalizes: before designing machinery, ask what
+  the parser already knows.
+- **`&attributes` bare symbols are name tokens** (§3.5), closing a
+  sigil-swallowing bug of the same species as the bare mixin call's: the
+  reader treats `=` as a symbol constituent, so `&attributes attributes= x`
+  read as the single symbol `attributes=` — free-symbol nil, attributes
+  silently dropped, tail rendered as literal text. The corpus's #1424
+  regression case masked half of it: the argument's name and value were both
+  `work`, so the literal text *happened to equal* the intended output.
+  Delimited forms keep the reader. Pinned in the merge-attrs suite with a
+  probe the corpus cannot express.
+- **The erratum in rev. 7's note** (S12 scope): recorded inline where the
+  wrong claim was made; the departure log is the authoritative record.
+- **S16 opened** — the first non-empty docket since S15: two escaper-shape
+  questions in attribute position (`attrs-data`), pug's class-hoisting
+  against the source-order doctrine (`attrs.js`), and `mixin.attrs`'s
+  residual deltas. Premise verification against the pug 3.0.2 tag has
+  already reshaped the third: two of its three deltas are converter
+  artifacts in carlin's *templates* (an inline-text-promoted-to-argument
+  call; a `.thunk` moved ahead of the attrs map), not golden defects — the
+  goldens are pug's honest output and the doctrine already agrees with them.
+  Rulings pending.

@@ -168,14 +168,30 @@
                         ;; map sat among the .class shorthands
                         :classes-before-attrs (count (:classes a)))))
 
-        ;; &attributes expr — the expression ends on its line (§3.1 corollary)
+        ;; &attributes expr — the expression ends on its line (§3.1 corollary).
+        ;; A bare symbol is a word-char TOKEN, not a reader form (same lesson
+        ;; as the bare +name mixin call): `=` / `!=` after it are buffered
+        ;; sigils, but the reader would swallow them into the symbol
+        ;; (`&attributes attributes= x` → the symbol `attributes=`, silently
+        ;; nil). Delimited forms — ( [ { — keep the reader, which is
+        ;; authoritative for its own delimiters.
         (str/starts-with? rem "&attributes")
         (let [col' (+ col (count "&attributes"))
               col' (+ col' (count (take-while #(= \space %) (rest-of-line cursor line col'))))
-              r    (read-line-form cursor line col')]
-          (if r
-            (recur line (:end-col r) (assoc a :amp-attrs (:form r)))
-            (assoc a :next-line (inc line))))
+              rem' (rest-of-line cursor line col')]
+          (cond
+            (str/blank? rem')
+            (assoc a :next-line (inc line))
+
+            (word-char? (nth rem' 0))
+            (let [end (consume-while rem' 0 word-char?)]
+              (recur line (+ col' end)
+                     (assoc a :amp-attrs (symbol (subs rem' 0 end)))))
+
+            :else
+            (if-let [r (read-line-form cursor line col')]
+              (recur line (:end-col r) (assoc a :amp-attrs (:form r)))
+              (assoc a :next-line (inc line)))))
 
         ;; explicit self-close
         (str/starts-with? rem "/")

@@ -56,3 +56,25 @@
     (is (= {:color "blue" :margin "0"}
            (:style (m :ignore nil {:style {:color "blue" :margin "0"}}
                       {:style {:color "red"}}))))))
+
+(deftest amp-attributes-bare-symbol-is-a-token
+  ;; The bare +name lesson, recurring at the &attributes position: a bare
+  ;; symbol scans as a word-char TOKEN, so a trailing = / != is a buffered
+  ;; sigil, not a symbol constituent. Before the fix, edamame read
+  ;; `attributes=` as one symbol — free-symbol nil, attrs silently dropped,
+  ;; tail rendered as literal text (the #1424 corpus case masked it: arg
+  ;; name and value were both "work").
+  (let [tpl (fn [tail]
+              (str "mixin w [x]\n  " tail "\n+(w \"V\"){\"data-p\" \"pp\"}"))]
+    (testing "bare symbol + buffered = : attrs forwarded AND value evaluated"
+      (is (= "<div data-p=\"pp\">V</div>"
+             (render1 (tpl "div&attributes attributes= x")))))
+    (testing "bare symbol + buffered != : same anatomy, raw branch"
+      (is (= "<div data-p=\"pp\">V</div>"
+             (render1 (tpl "div&attributes attributes!= x")))))
+    (testing "bare symbol alone still forwards (string keys included)"
+      (is (= "<div data-p=\"pp\"></div>"
+             (render1 (tpl "div&attributes attributes")))))
+    (testing "delimited form keeps the reader, buffered tail follows"
+      (is (= "<div data-p=\"pp\" k=\"v\">V</div>"
+             (render1 (tpl "div&attributes (merge attributes {:k \"v\"})= x")))))))
