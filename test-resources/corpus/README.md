@@ -60,16 +60,19 @@ output pug produced).
 
 - `while.*` — carlin excludes `while` (spec §10). The case is retained as raw
   material for a *negative* test: carlin must reject it with a positioned error.
-- `yield*.*` (5 cases) — jade-era include-with-body (`yield`). Since spec
-  rev. 10 carlin HAS include-with-body spliced at `yield` (§3.11, landed
-  2026-07-22), so the original exclusion rationale (children under `include`
-  were an error) is obsolete. Current status, verified by probe: the three
-  *includer-side* cases (`yield`, `yield-title`, `yield-before-conditional`)
-  would pass as-is; the `*-head` cases are include TARGETS that, compiled as
-  roots, correctly raise `:yield-outside-include` — the diagnostics suite
-  pins that class. Readmitting the three passers changes the conformance
-  denominator (100 → 103) and therefore goes to the docket first (S19,
-  open); until ruled, the family stays here.
+- `yield*-head.html` (3 goldens) — the only surviving `yield*` exclusions.
+  The family's history: excluded wholesale when children under `include`
+  were an error; spec rev. 10 adopted include-with-body at `yield`, and the
+  three *includer-side* cases (`yield`, `yield-title`,
+  `yield-before-conditional`) were probe-verified green under the landed
+  law and **readmitted to `cases/`, Ricardo-ratified (S19), 2026-07-22**
+  ("it's always good to see prodigal offsprings return") — an S14-shaped
+  denominator adjustment in reverse: 100 → 103, landing at 83/103 in the
+  same stroke. Their `*-head` include TARGETS moved to `cases/` as support
+  files *without* golden pairing (the harness only pairs `.carlin` with an
+  adjacent `.html`): compiled as roots they correctly raise
+  `:yield-outside-include`, which the diagnostics suite pins — so their
+  goldens stay here, negative-by-design.
 
 - **Dependency-heavy filter cases (8)** — `filters.markdown`, `filters.less`,
   `filters.stylus`, `filters.coffeescript`, `filters.nested` (uglify-js +

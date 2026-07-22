@@ -326,9 +326,9 @@ included template at its `yield` node — composition's parameterization, the
 include-side counterpart of inheritance's named blocks. `yield` is meaningful
 **only inside a file being included**; encountered anywhere else it is a
 positioned `:yield-outside-include` error, so top-level `yield` remains
-outside the language (of the excluded `yield*` corpus family, the `*-head`
-roots pin this error; the three includer-side cases would now pass and
-their readmission — a denominator change — is docketed as S19).
+outside the language (the `yield*-head` corpus files pin this error as
+roots; the three includer-side cases were readmitted to the corpus under
+the landed law — S19, rev. 12).
 The block-in-include ban (D7) is untouched: `yield` is composition's splice
 point, `block` is inheritance's, and the wall between them stands.
 
@@ -1211,3 +1211,17 @@ asserted from memory. Ratchet 77 → **80/100**, baselined, zero regressions
   (`yield`, `yield-title`, `yield-before-conditional`) were probe-verified
   green under the new law; readmitting them moves the denominator
   (100 → 103) and awaits ruling.
+
+**Revision note (rev. 12).** S19 ruled and applied: the three includer-side
+`yield*` exclusions (`yield`, `yield-title`, `yield-before-conditional`)
+readmitted to `cases/` — their exclusion rationale (children under
+`include` were an error) died with `:include-children`, and all three were
+probe-verified green before the ruling (the rev. 11 lesson, honored).
+Denominator 100 → **103**; ratchet lands at **83/103, baselined, zero
+regressions** in the same stroke — an S14-shaped adjustment in reverse:
+S14 removed cases whose failure misstated the engine downward; S19 restores
+cases whose passing was hidden. The `yield*-head` include targets moved to
+`cases/` as support files without golden pairing; compiled as roots they
+raise `:yield-outside-include`, pinned in the diagnostics suite, and their
+goldens remain in `_excluded/`, negative-by-design. No code changed —
+this revision is corpus population only.

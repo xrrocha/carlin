@@ -1,18 +1,20 @@
-# Carlin — session handoff (rev. 16)
+# Carlin — session handoff (rev. 17)
 
-**Supersedes rev. 15 entirely.** State: **ruling 4 ENFORCED — the last
-rev. 7 law is code.** Include-with-body at `yield` landed with its
-ride-along (include-with-filter attrs), probe-first honored throughout, and
-the session's two S-questions (S17, S18) were Ricardo-ratified and applied
-same-day, recorded as **spec rev. 11**. Ratchet **80/100, baselined, zero
-regressions ever** (flips: `include.yield.nested`, `include-only-text`,
-`filters.include.custom`; cold clone reproduced 77/100 first — third
-cold-start proof). Spec suites: **17 tests, 95 assertions, 0 failures**.
-**§3.12 filters is COMPLETE (4/4).** The docket holds one open item: S19.
+**Supersedes rev. 16 entirely.** State: **ruling 4 ENFORCED and the docket
+EMPTY.** Include-with-body at `yield` landed with its ride-along
+(include-with-filter attrs), probe-first honored throughout; the session's
+three S-questions (S17, S18, S19) were Ricardo-ratified and applied
+same-day, recorded as **spec revs. 11 and 12**. Ratchet **83/103,
+baselined, zero regressions ever** (77 → 80 from the feature flips:
+`include.yield.nested`, `include-only-text`, `filters.include.custom`;
+80/100 → 83/103 from S19's readmission — the denominator moved, S14-shaped
+in reverse; cold clone reproduced 77/100 first — third cold-start proof).
+Spec suites: **17 tests, 95 assertions, 0 failures**. **§3.12 filters is
+COMPLETE (4/4).**
 
 Frontier: **§3.11 include (7/11)**, **§3.5 attributes (5/8)**, **misc
 (19/23)**, §3.3 text (3/5), §3.13 mixins (9/11). No single gate remains —
-the pre-ruled law is exhausted; what's left is pools plus one docket ruling.
+the pre-ruled law is exhausted; what's left is the pools.
 
 ## 1. The charter (Ricardo-confirmed, S1–S7)
 
@@ -50,36 +52,36 @@ instrument; baseline promoted in the same stroke as each gain.
 6. `:include-children` retired; new diagnostics all pinned:
    `:yield-outside-include`, `:yield-children`, `:body-in-raw-include`,
    `:body-without-yield` (suites 17/95/0).
+7. **S19** (spec rev. 12, "prodigal offsprings return"): the three
+   includer-side `yield*` exclusions readmitted to `cases/` — their
+   exclusion rationale died with `:include-children`, and all three were
+   probe-verified green BEFORE the ruling. Denominator 100 → 103, landing
+   at 83/103 in the same stroke. The `yield*-head` include targets moved
+   to `cases/` as support files WITHOUT golden pairing (the harness pairs
+   `.carlin` only with an adjacent `.html`); as roots they raise
+   `:yield-outside-include`, pinned; their goldens stay in `_excluded/`,
+   negative-by-design.
 
 ## 3. Artifacts
 
 | Artifact | State |
 |---|---|
-| `docs/carlin-spec.md` | **Rev. 11** — §3.11 edge semantics rewritten from ratified-ahead to probed-and-landed law (probe record, S17, yield anatomy, edge rule, include-filter attrs surface); yield* exclusion parenthetical updated for S19; rev. 11 revision note appended. |
+| `docs/carlin-spec.md` | **Rev. 12** — §3.11 edge semantics rewritten from ratified-ahead to probed-and-landed law (probe record, S17, yield anatomy, edge rule, include-filter attrs surface); rev. 11 note (ruling 4 enforced) and rev. 12 note (S19) appended. |
 | `src/carlin/core.cljc` | `yield` directive (bare-only token — the `+name`/`&attributes` lesson honored prospectively, as rev. 13 predicted); include branch filter-attrs; `splice-yields` (every-yield replication, cascade-preserving); `included?` edge flag on `resolve-template`; `walk-checks` include case retired, `:yield-children` added; header diagnostics inventory current. |
 | `src/carlin/codegen.cljc` | `:yield → nil` (unfed splice point renders nothing). |
 | `test/carlin/diagnostics_test.cljc` | `:include-children` pin replaced by five new pins across four classes (probe values, name ≠ value). |
 | `test-resources/…/cases/filters.include.custom.{carlin,html}` | S18 repair + repair-consequent golden edit. |
-| `test-resources/corpus/README.md` | yield* exclusion rationale rewritten (obsolete premise); S17 departure entry; S18 repair entry; S19 noted. |
-| `conformance-manifest.edn` | 80 cases, baselined. |
+| `test-resources/corpus/README.md` | S17 departure entry; S18 repair entry; S19 readmission entry (exclusion note now covers only the three `yield*-head` goldens). |
+| `test-resources/…/cases/` | +6 files via S19: three golden pairs readmitted, three `*-head` support templates (no goldens). |
+| `conformance-manifest.edn` | 83 cases, baselined. |
 
-## 4. Open docket — awaiting Ricardo
+## 4. Open docket
 
-**S19 — readmit the three includer-side `yield*` exclusions?**
-`yield`, `yield-title`, `yield-before-conditional` were probe-verified
-GREEN under the landed law (their `*-head` companions stay excluded — as
-roots they correctly raise `:yield-outside-include`, and the diagnostics
-suite pins that). Readmission moves the conformance denominator 100 → 103
-and likely lands at 83/103 in the same stroke. Recommended: readmit the
-three, keep the `*-head` files as auxiliary include targets only (no
-golden pairing in `cases/`), log as an S14-shaped denominator adjustment
-in reverse.
+**EMPTY.** S17, S18, S19 all ruled and applied 2026-07-22.
 
 ## 5. Next session's plan — in order
 
-1. Rule + apply S19 (mechanical if ratified: move 3 pairs into `cases/`,
-   `*-head` files move as auxiliary targets, re-baseline).
-2. **The pools**, biggest first: §3.11 include (4 reds:
+1. **The pools**, biggest first: §3.11 include (4 reds:
    `includes`, `includes-with-ext-js`, `include-with-text`,
    `include-only-text-body` — note the last is an include TARGET that also
    stands as its own case; as a root it contains bare text with
@@ -91,7 +93,7 @@ in reverse.
    `comments`, `inline-tag`, `code.conditionals`, `tags.self-closing`.
    (`inheritance.extend.include` is the permanent departure — never
    counts.)
-3. Later: `deftemplate`, sci (must mirror S15's template-ns), CLJS matrix,
+2. Later: `deftemplate`, sci (must mirror S15's template-ns), CLJS matrix,
    vendor-vs-depend edamame.
 
 ## 6. Working agreement (unchanged, one observation)
