@@ -12,11 +12,13 @@
   Positions: every node is stamped :pos {:key :line :col}; captured bodies
   keep :from-line and :base-indent so interpolation errors can be rebased.
 
-  Diagnostics owned here (unchanged from step 1): :unterminated-form,
-  :unsupported-directive, :extends-not-first, :invalid-under-extends,
-  :nested-mixin, :include-children, :default-not-last, :mixin-arity,
-  :attr-conflict, :unresolvable-ref. Splice-dependent checks
-  (:block-in-include) arrive with include-splice.
+  Diagnostics owned here: :unterminated-form, :unsupported-directive,
+  :extends-not-first, :invalid-under-extends, :nested-mixin,
+  :yield-children, :yield-outside-include, :default-not-last, :mixin-arity,
+  :attr-conflict, :unresolvable-ref. Splice-dependent checks:
+  :block-in-include, :include-cycle, :body-in-raw-include,
+  :body-without-yield (S17-provisional). :include-children retired —
+  children under include are the include BODY since rev. 10 (§3.11).
 
   Where the full grammar hasn't landed, the scanner stays LENIENT: reader
   failures propagate only where the reader is authoritative — unclosed
@@ -259,7 +261,7 @@
 ;; head classification
 
 (def ^:private directive-re
-  #"^(extends|include|append|prepend|mixin|each|for|case|when|default|while|doctype|if|unless|else|block)(?![\w-])")
+  #"^(extends|include|append|prepend|mixin|each|for|case|when|default|while|doctype|if|unless|else|block|yield)(?![\w-])")
 
 (defn- mixin-arity
   "Arity of a mixin binding vector: destructuring forms count as one
@@ -437,12 +439,30 @@
                                   (let [e (consume-while after 1 word-char?)]
                                     [(subs after 1 e) (subs after e)])
                                   [nil after])
-                  ref (str/trim after)]
+                  ;; include:filter may carry an attrs map (§3.12 rev. 10
+                  ;; ride-along): `include:custom{:opt "val"} ref` — same
+                  ;; surface as a standalone filter, read by the reader, so
+                  ;; it may span lines like any attr map; the ref follows on
+                  ;; the map's closing line. Only sought when a filter name
+                  ;; is present — a bare include's ref is never sniffed.
+                  fattrs (when (and fname
+                                    (str/starts-with? (str/triml after) "{"))
+                           (let [bi (str/index-of content "{"
+                                                  (- (count content) (count after)))]
+                             (read-source-form cursor line (+ col bi))))
+                  [ref-line ref-str]
+                  (if fattrs
+                    [(:end-line fattrs)
+                     (rest-of-line cursor (:end-line fattrs) (:end-col fattrs))]
+                    [line after])
+                  ref (str/trim ref-str)]
               {:node (node :include :ref ref :filter fname
+                           :filter-attrs (:form fattrs)
                            :ref-pos (when (seq ref)
-                                      {:line line
-                                       :col (+ col (str/last-index-of content ref))}))
-               :consumed (next+ (inc line))})
+                                      (let [rl (or (cur/line-at cursor ref-line) "")]
+                                        {:line ref-line
+                                         :col (inc (str/last-index-of rl ref))})))
+               :consumed (next+ (inc (or (:end-line fattrs) line)))})
 
             ("block" "append" "prepend")
             (let [[w1 w2 w3] (str/split (str/trim content) #"\s+")
@@ -498,7 +518,16 @@
 
             "doctype"
             {:node (node :doctype :value (str/trim (subs content (count kw))))
-             :consumed (next+ (inc line))}))
+             :consumed (next+ (inc line))}
+
+            "yield"
+            ;; the include-body splice point (§3.11). The directive fires
+            ;; only BARE, exactly like pug's lexer: `yield trailing text` is
+            ;; a tag named yield (markup-agnosticism §1 — someone's XML may
+            ;; contain a <yield> element), claimed here only when alone.
+            (if (str/blank? (subs content (count kw)))
+              {:node (node :yield) :consumed (next+ (inc line))}
+              (parse-tag cursor line indent col node))))
 
         ;; anything else is a tag line (unknown names are tags — web
         ;; components welcome, §3.2); leniency lives in the anatomy
@@ -573,9 +602,16 @@
                     :mixin-call
                     (cond-> acc (:call node) (update :calls conj (:call node)))
 
-                    :include
+                    ;; :include children are the include BODY (§3.11) —
+                    ;; legal since rev. 10; their fate (yield-splice or a
+                    ;; positioned error) is decided at splice time, where
+                    ;; the resolver's :kind is known.
+
+                    :yield
                     (do (when (seq (:children node))
-                          (cur/fail! cursor :include-children (:pos node)))
+                          ;; pug agrees: `yield` under indentation is a
+                          ;; syntax error there; a positioned class here
+                          (cur/fail! cursor :yield-children (:pos node)))
                         acc)
 
                     :case
@@ -633,6 +669,36 @@
 
 (declare resolve-template dissolve-blocks)
 
+(defn- splice-yields
+  "Replace every :yield node in `nodes` with the include body `body`,
+  replicated per site (§3.11, the every-yield law — evaluation, and side
+  effects, run per splice; the author's rope). Returns [nodes' n-sites].
+  Body nodes are inserted verbatim, never re-walked, so a yield INSIDE the
+  body (legal when the body is written in a file itself reached via
+  include) survives for an enclosing include's body — pug's cascade.
+  A `tag: yield` expansion takes the body as the tag's children (the
+  expansion slot holds ONE node; children are the same meaning with room).
+  Called only when a body exists: a body-less include leaves :yield nodes
+  untouched, so the cascade can feed them or, unfed, they render nothing
+  (pug 3.0.2, probed 2026-07-22)."
+  [nodes body]
+  (let [sites (volatile! 0)]
+    (letfn [(walk-nodes [ns]
+              (into []
+                    (mapcat (fn [n]
+                              (if (= :yield (:type n))
+                                (do (vswap! sites inc) body)
+                                [(walk n)])))
+                    ns))
+            (walk [n]
+              (let [n (update n :children walk-nodes)]
+                (if (and (:expanded n) (= :yield (:type (:expanded n))))
+                  (do (vswap! sites inc)
+                      (-> n (dissoc :expanded) (assoc :children (vec body))))
+                  (cond-> n (:expanded n) (update :expanded walk)))))]
+      (let [out (walk-nodes nodes)]
+        [out @sites]))))
+
 (defn- splice-includes
   "Replace every :include node in `nodes` (belonging to the file `cursor`
   reads) with its resolved content:
@@ -658,37 +724,68 @@
              (platform/resolve-source (:resolver opts) (:key cursor) ref)]
          (when-not hit
            (cur/fail! cursor :unresolvable-ref pos {:ref ref}))
-         (let [state (add-dep state key)]
+         (let [state (add-dep state key)
+               body-nodes (:children node)]
            (cond
              (:filter node)
-             [(conj out {:type :filter :name (:filter node) :attrs nil
-                         :body {:text source}
-                         :pos (:pos node) :indent (:indent node) :children []})
-              state]
+             (do (when (seq body-nodes)
+                   ;; pug 3.0.2 (probed 2026-07-22): "Raw inclusion cannot
+                   ;; contain a block" — positioned error, adopted verbatim
+                   ;; under the lossiness rule (rev. 10)
+                   (cur/fail! cursor :body-in-raw-include (:pos node)
+                              {:target key :via :filter}))
+                 [(conj out {:type :filter :name (:filter node)
+                             :attrs (:filter-attrs node)
+                             :body {:text source}
+                             :pos (:pos node) :indent (:indent node) :children []})
+                  state])
 
              (= :raw kind)
-             [(conj out {:type :literal-html :text source :verbatim? true
-                         :pos (:pos node) :indent (:indent node) :children []})
-              state]
+             (do (when (seq body-nodes)
+                   (cur/fail! cursor :body-in-raw-include (:pos node)
+                              {:target key :via :raw}))
+                 [(conj out {:type :literal-html :text source :verbatim? true
+                             :pos (:pos node) :indent (:indent node) :children []})
+                  state])
 
              :else
              (do
                (when (some #{key} path)
                  (cur/fail! cursor :include-cycle (:pos node)
                             {:ref ref :chain (conj path key)}))
-               (let [{ttree :tree extended? :extended? state :state}
-                     (resolve-template source key opts (conj path key) state)]
-                 (if extended?
-                   ;; the included file ran its OWN inheritance (§3.14/§3.11):
-                   ;; that resolution is private — its named blocks dissolve
-                   ;; here, so nothing leaks into the includer's namespace and
-                   ;; D7 keeps its teeth for the non-extending case below
-                   [(into out (dissolve-blocks ttree)) state]
-                   (do
-                     (when-let [b (first (block-nodes ttree))]
-                       (cur/fail! cursor :block-in-include (:pos node)
-                                  {:target key :block-pos (:pos b)}))
-                     [(into out ttree) state])))))))
+               (let [;; the body is written in THIS file: it splices in the
+                     ;; includer's context (its own includes resolve here)
+                     [body state] (splice-includes cursor body-nodes opts
+                                                   path state)
+                     {ttree :tree extended? :extended? state :state}
+                     (resolve-template source key opts (conj path key) state
+                                       true)
+                     content
+                     (if extended?
+                       ;; the included file ran its OWN inheritance
+                       ;; (§3.14/§3.11): that resolution is private — its
+                       ;; named blocks dissolve here, so nothing leaks into
+                       ;; the includer's namespace and D7 keeps its teeth
+                       ;; for the non-extending case below
+                       (dissolve-blocks ttree)
+                       (do
+                         (when-let [b (first (block-nodes ttree))]
+                           (cur/fail! cursor :block-in-include (:pos node)
+                                      {:target key :block-pos (:pos b)}))
+                         ttree))
+                     [content n-sites] (if (seq body)
+                                         (splice-yields content body)
+                                         [content 0])]
+                 (when (and (seq body) (zero? n-sites))
+                   ;; S17 — PROVISIONAL, awaiting Ricardo's ruling. Pug does
+                   ;; NOT discard here: pug-linker's defaultYieldLocation
+                   ;; buries the body in the DEEPEST LAST block of the
+                   ;; included file (its own source carries a deprecation
+                   ;; todo). Not lossy, but the landing site is an accident
+                   ;; of the included file's shape — recommended: error.
+                   (cur/fail! cursor :body-without-yield (:pos node)
+                              {:target key}))
+                 [(into out content) state])))))
        ;; not an include: recurse structurally (children + expanded head)
        (let [[kids state] (splice-includes cursor (:children node) opts path state)
              [exp state]  (if (:expanded node)
@@ -762,9 +859,23 @@
   of an extending file lands, hoistable, in the merged tree. Named blocks
   are NOT yet dissolved: the caller either merges further overrides into
   them (the next chain level) or dissolves them (the root / a splice).
-  Returns {:cursor :tree :extended? :state}."
-  [source key opts path state]
+  Returns {:cursor :tree :extended? :state}.
+
+  `included?` marks a file reached via an include edge — the only files in
+  which `yield` is meaningful (§3.11). The check runs over THIS file's own
+  parse tree, before splicing, so a yield ARRIVING via a nested splice is
+  never misattributed. Extends is inheritance, not composition: a layout
+  gets `included?` false even when the extending file was itself included."
+  ([source key opts path state]
+   (resolve-template source key opts path state false))
+  ([source key opts path state included?]
   (let [{:keys [cursor tree defs calls]} (parse-one source key)
+        _ (when-not included?
+            (letfn [(check [n]
+                      (when (= :yield (:type n))
+                        (cur/fail! cursor :yield-outside-include (:pos n)))
+                      (run! check (node-kids n)))]
+              (run! check tree)))
         state (-> state (update :defs merge defs) (update :calls into calls))
         [tree state] (splice-includes cursor tree opts path state)
         head  (first (remove comment? tree))]
@@ -792,7 +903,7 @@
           {:cursor cursor
            :tree (into (vec carried) (merge-blocks ltree blocks))
            :extended? true
-           :state state})))))
+           :state state}))))))
 
 ;; ---------------------------------------------------------------------------
 ;; the shipped file resolver (spec §5.4)

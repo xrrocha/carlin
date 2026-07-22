@@ -36,8 +36,44 @@
                                        :source "block content\n  p leaked"
                                        :kind   :template}))})
                   :block-in-include)))
-  (testing "children under include (§3.11, ex-yield)"
-    (is (classed? (err "include foo\n  p child") :include-children)))
+  (testing "yield outside an included file (§3.11)"
+    (is (classed? (err "yield") :yield-outside-include))
+    ;; …including inside an include BODY: the body is written in the root
+    ;; file, and yield legality follows the include EDGE, not the composed
+    ;; tree (probe values: name ≠ value, rev. 13's lesson)
+    (is (classed? (err "include lib\n  yield"
+                       {:resolver (fn [_ ref]
+                                    (when (= ref "lib")
+                                      {:key "lib.carlin"
+                                       :source "p in lib\nyield"
+                                       :kind :template}))})
+                  :yield-outside-include)))
+  (testing "yield takes no children (§3.11; pug agrees: syntax error)"
+    (is (classed? (err "yield\n  p child") :yield-children)))
+  (testing "body on a raw include (§3.11; pug: 'Raw inclusion cannot contain a block')"
+    (is (classed? (err "include styles.css\n  p body"
+                       {:resolver (fn [_ ref]
+                                    (when (= ref "styles.css")
+                                      {:key "styles.css"
+                                       :source "body { margin: 0 }"
+                                       :kind :raw}))})
+                  :body-in-raw-include))
+    (is (classed? (err "include:verbatim lib\n  p body"
+                       {:resolver (fn [_ ref]
+                                    (when (= ref "lib")
+                                      {:key "lib.carlin"
+                                       :source "p in lib"
+                                       :kind :template}))})
+                  :body-in-raw-include)))
+  (testing "body on an include whose target has no yield (§3.11, S17 PROVISIONAL —
+            pug buries it at the deepest last block; awaiting ruling)"
+    (is (classed? (err "include lib\n  p body"
+                       {:resolver (fn [_ ref]
+                                    (when (= ref "lib")
+                                      {:key "lib.carlin"
+                                       :source "p no splice point here"
+                                       :kind :template}))})
+                  :body-without-yield)))
   (testing "nested mixin definition (§3.13)"
     (is (classed? (err "div\n  mixin f [x]\n    p= x") :nested-mixin)))
   (testing "mixin arity mismatch, compile time (§3.13 D11)"

@@ -60,9 +60,16 @@ output pug produced).
 
 - `while.*` — carlin excludes `while` (spec §10). The case is retained as raw
   material for a *negative* test: carlin must reject it with a positioned error.
-- `yield*.*` (5 cases) — jade-era include-with-children (`yield`). Carlin makes
-  children under `include` a positioned compile error (spec §3.11 / Q9). Also
-  negative-test material.
+- `yield*.*` (5 cases) — jade-era include-with-body (`yield`). Since spec
+  rev. 10 carlin HAS include-with-body spliced at `yield` (§3.11, landed
+  2026-07-22), so the original exclusion rationale (children under `include`
+  were an error) is obsolete. Current status, verified by probe: the three
+  *includer-side* cases (`yield`, `yield-title`, `yield-before-conditional`)
+  would pass as-is; the `*-head` cases are include TARGETS that, compiled as
+  roots, correctly raise `:yield-outside-include` — the diagnostics suite
+  pins that class. Readmitting the three passers changes the conformance
+  denominator (100 → 103) and therefore goes to the docket first (S19,
+  open); until ruled, the family stays here.
 
 - **Dependency-heavy filter cases (8)** — `filters.markdown`, `filters.less`,
   `filters.stylus`, `filters.coffeescript`, `filters.nested` (uglify-js +
@@ -217,3 +224,25 @@ golden file and logging the departure, never by silently matching pug.
   option, so the battery exercises the documented extension point rather than
   a compiler special case. Keep it minimal, as with `case-model`.
   Ricardo-ratified (S13), 2026-07-19.
+- **`:body-without-yield` — behavioral departure (S17).** A body on an
+  include whose target (fully resolved) contains no `yield` is a positioned
+  compile error in carlin. Pug 3.0.2 does NOT discard the body — probed
+  2026-07-22 against both npm `pug@3.0.2` and pug-linker's source: its
+  `defaultYieldLocation` buries the body inside the *deepest last block* of
+  the included file (e.g. producing `<p>` nested inside `<p>`), a landing
+  site that is an accident of the included file's shape, and the linker's
+  own source carries `// todo: probably should deprecate this with a
+  warning`. Ruled grossly unexpected under the rev. 10 lossiness rule:
+  "camming content at an unpredictable context-dependent location is
+  inadmissible." No corpus case exercises the pug behavior; the diagnostics
+  suite pins the error. Ricardo-ratified (S17), 2026-07-22.
+- `filters.include.custom.carlin` — **converter-error repair + consequent
+  golden edit (S18), NOT a departure.** The template still carried pug
+  attribute syntax: `include:custom(opt='val' num=2)` → repaired to
+  `include:custom{:opt "val" :num 2}` (the include branch now parses a
+  filter-attrs map, spec §3.11/§3.12, rev. 10 ride-along). The case includes
+  *itself* and the `custom` filter embeds the file's own source, so the
+  golden's embedded line necessarily changes with the repair (it read
+  `…filters.include.custom.pug`, the pre-morph source). The embedded text
+  was regenerated mechanically from the repaired file and verified to equal
+  `BEGIN` + file bytes + `END`. Ricardo-ratified (S18), 2026-07-22.

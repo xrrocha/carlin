@@ -380,6 +380,7 @@
 (defn- gen [ctx {:keys [type] :as node}]
   (case type
     :doctype        nil
+    :yield          nil ; unfed splice point renders nothing (§3.11, probed)
     :comment-silent nil
     :comment        (comment-code ctx node)
     :text           (or (text-code ctx :escaped (:text node) (:pos node)) "")

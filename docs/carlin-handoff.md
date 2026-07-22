@@ -1,19 +1,18 @@
-# Carlin — session handoff (rev. 15)
+# Carlin — session handoff (rev. 16)
 
-**Supersedes rev. 14 entirely.** State: **S16 closed AND ruling 4's
-enforcement session pre-ruled** — three decisions Ricardo-ratified in batch
-2026-07-22, recorded as **spec rev. 10** (law without code; §3.11 amended).
-Ratchet **77/100, baselined, zero regressions ever** (S16's three flips:
-`attrs-data`, `attrs.js`, `mixin.attrs`; cold clone reproduced 74/100 first).
-Spec suites: **17 tests, 90 assertions, 0 failures, 0 errors**. The docket is
-**EMPTY** — and rev. 10's lossiness rule pre-answers the docket items the
-probe was expected to open.
+**Supersedes rev. 15 entirely.** State: **ruling 4 ENFORCED — the last
+rev. 7 law is code.** Include-with-body at `yield` landed with its
+ride-along (include-with-filter attrs), probe-first honored throughout, and
+the session's two S-questions (S17, S18) were Ricardo-ratified and applied
+same-day, recorded as **spec rev. 11**. Ratchet **80/100, baselined, zero
+regressions ever** (flips: `include.yield.nested`, `include-only-text`,
+`filters.include.custom`; cold clone reproduced 77/100 first — third
+cold-start proof). Spec suites: **17 tests, 95 assertions, 0 failures**.
+**§3.12 filters is COMPLETE (4/4).** The docket holds one open item: S19.
 
-Frontier: **§3.5 attributes (5/8)**, **§3.11 include (5/11)**, **misc
-(19/23)**, **§3.13 mixins (9/11)**, §3.3 text (3/5). The gate is **ruling 4 —
-include-with-body at `yield`** plus its ride-along, **include-with-filter**:
-one session, everything in the include branch's context fixed while it is in
-context.
+Frontier: **§3.11 include (7/11)**, **§3.5 attributes (5/8)**, **misc
+(19/23)**, §3.3 text (3/5), §3.13 mixins (9/11). No single gate remains —
+the pre-ruled law is exhausted; what's left is pools plus one docket ruling.
 
 ## 1. The charter (Ricardo-confirmed, S1–S7)
 
@@ -22,101 +21,115 @@ Unchanged. New system feature by feature; whole-template bailout to
 legacy behavior-frozen not byte-frozen; `bb ratchet` is the enforcing
 instrument; baseline promoted in the same stroke as each gain.
 
-## 2. The three pre-rulings (rev. 10 — READ BEFORE PROBING)
+## 2. What landed this session (rev. 11)
 
-1. **The lossiness rule.** Follow pug as faithfully as possible **unless its
-   behavior is lossy or grossly unexpected** — then positioned error, logged
-   departure. This pre-ratifies the silent-discard class: if the probe shows
-   pug dropping an include body (no-`yield` file, `:kind :raw` include),
-   carlin errors — no S-docket round-trip, just the departure entry. Results
-   that are merely *surprising* still come back for adjudication; "grossly
-   unexpected" is Ricardo's call, not the session's.
-2. **Multiple `yield`s: splice at EVERY yield.** Carlin law independent of
-   the probe (a pug divergence is a logged departure, not a reopened
-   question). Body AST replicates per splice site; evaluation — and side
-   effects — run per splice; explicitly the author's rope, explicitly in
-   §3.11 now.
-3. **Include-with-filter rides along** in the same session: filter-attrs
-   parse on the include branch + corpus repairs to `include:custom{:opt
-   "val"}`. Fix everything in context while it's in context. Corpus edits
-   still go to the docket first — riding along changes the session plan,
-   not the paperwork.
+1. **The probe** (pug 3.0.2, npm package cross-checked against pug-linker's
+   source — never memory): multiple yields → pug splices at EVERY yield, so
+   rev. 10's law is pug-faithful, no departure; body on raw/filtered
+   include → pug errors ("Raw inclusion cannot contain a block"), adopted
+   as `:body-in-raw-include`; unfed yields render nothing and survive for
+   an enclosing body (the cascade), adopted; `yield`+trailing-text is a
+   tag, `yield`+children an error, both adopted.
+2. **S17** (the one merely-surprising probe result, returned per the
+   lossiness rule): body on a no-`yield` include. Pug buries it at the
+   *deepest last block* (`defaultYieldLocation`, own deprecation todo in
+   source). Ruled grossly unexpected — "camming content at an unpredictable
+   context-dependent location is inadmissible" — so carlin raises
+   `:body-without-yield`, logged departure.
+3. **The splice**: body spliced in the *includer's* context first, then
+   replicated at every `yield` in the fully resolved target; `tag: yield`
+   expansion takes the body as children; yield legality follows the include
+   EDGE (root and extends-reached files error with
+   `:yield-outside-include`, even inside include bodies written there).
+4. **Ride-along**: `include:custom{:opt "val"} ref` — filter-attrs map on
+   the include branch, passed to the filter fn; may span lines, ref follows
+   on the closing line; sought only when a filter name is present.
+5. **S18**: `filters.include.custom` repaired from pug attr syntax; the
+   case includes ITSELF, so the golden's embedded source line changed in
+   consequence — regenerated mechanically, verified `BEGIN`+bytes+`END`.
+6. `:include-children` retired; new diagnostics all pinned:
+   `:yield-outside-include`, `:yield-children`, `:body-in-raw-include`,
+   `:body-without-yield` (suites 17/95/0).
 
 ## 3. Artifacts
 
 | Artifact | State |
 |---|---|
-| `docs/carlin-spec.md` | **Rev. 10** — §3.11 edge semantics rewritten from "to be pinned by probe" to the ratified posture (every-yield splice as law; remaining edges pug-bounded-by-lossiness); rev. 10 revision note appended. Rev. 9 (S16 rulings, §6.3 correction) written earlier the same day. |
-| `src/carlin/runtime.cljc` | `js-string` narrowed to escape `<` only (S16 (a)(ii)); docstring records the ruling. |
-| `test/carlin/escaper_test.cljc` | One ride-along pin mechanically updated (`\u003E` → `&gt;`); `to_js_test`'s deliberate script-safety pins pass untouched. |
-| `test-resources/…/cases/attrs-data.html` | Golden edit (S16 (a)(i)): `Let's` → `Let&#39;s` — third S12 edit, attribute position. |
-| `test-resources/…/cases/attrs.js.html` | Golden edit, **permanent departure** (S16 (b)): class de-hoisted, source-order doctrine stands. S8's shape. |
-| `test-resources/…/cases/mixin.attrs.carlin` | Two converter-error **repairs** (S16 (c)): `+(centered nil)#First Hello World`; `+foo{…}.thunk`. Goldens untouched, verified honest vs the pug 3.0.2 tag. |
-| `test-resources/corpus/README.md` | Departure log current through S16: S12 entry annotated; attrs.js departure; mixin.attrs repairs. |
-| `conformance-manifest.edn` | 77 cases, baselined. |
+| `docs/carlin-spec.md` | **Rev. 11** — §3.11 edge semantics rewritten from ratified-ahead to probed-and-landed law (probe record, S17, yield anatomy, edge rule, include-filter attrs surface); yield* exclusion parenthetical updated for S19; rev. 11 revision note appended. |
+| `src/carlin/core.cljc` | `yield` directive (bare-only token — the `+name`/`&attributes` lesson honored prospectively, as rev. 13 predicted); include branch filter-attrs; `splice-yields` (every-yield replication, cascade-preserving); `included?` edge flag on `resolve-template`; `walk-checks` include case retired, `:yield-children` added; header diagnostics inventory current. |
+| `src/carlin/codegen.cljc` | `:yield → nil` (unfed splice point renders nothing). |
+| `test/carlin/diagnostics_test.cljc` | `:include-children` pin replaced by five new pins across four classes (probe values, name ≠ value). |
+| `test-resources/…/cases/filters.include.custom.{carlin,html}` | S18 repair + repair-consequent golden edit. |
+| `test-resources/corpus/README.md` | yield* exclusion rationale rewritten (obsolete premise); S17 departure entry; S18 repair entry; S19 noted. |
+| `conformance-manifest.edn` | 80 cases, baselined. |
 
-## 4. Next session's plan — in order
+## 4. Open docket — awaiting Ricardo
 
-1. **Probe pug 3.0.2** — tag tarball:
-   `https://github.com/pugjs/pug/archive/refs/tags/pug%403.0.2.tar.gz`
-   (URL-encode the `@`); npm also reachable. Pin: (a) body onto a no-`yield`
-   include; (b) multiple `yield`s (for the departure record only — carlin's
-   answer is already law); (c) body onto a `:kind :raw` include. Route each
-   result through the lossiness rule: silent discard → carlin errors, entry
-   in the departure log; faithful-and-lossless → adopt verbatim into §3.11;
-   merely surprising → back to Ricardo.
-2. **Implement the `yield` splice** in include-splice (cycle detection and
-   cross-file attribution already there); `:yield-outside-include` joins the
-   diagnostics suite; the excluded `yield*` family is negative-test raw
-   material. Species watch: `yield` is a bare word in line position — grep
-   every place a bare form meets the reader before closing the book (the
-   `+name` / `&attributes` lesson, third position over).
-3. **Include-with-filter in the same stroke**: filter-attrs parse on the
-   include branch; docket the corpus repairs (`include:custom{:opt "val"}`),
-   then apply. Candidate flips across 1–3: `include.yield.nested`,
-   `filters.include.custom`, `filter` reds in §3.11/§3.12.
-4. Baseline the gains; spec §3.11 gets the probe results; handoff rev. 16.
-5. Then the pools: attributes (3 left), misc (4), text (tagless lone-dot
-   block), mixins (2).
-6. Later: `deftemplate`, sci (must mirror S15's template-ns), CLJS matrix,
+**S19 — readmit the three includer-side `yield*` exclusions?**
+`yield`, `yield-title`, `yield-before-conditional` were probe-verified
+GREEN under the landed law (their `*-head` companions stay excluded — as
+roots they correctly raise `:yield-outside-include`, and the diagnostics
+suite pins that). Readmission moves the conformance denominator 100 → 103
+and likely lands at 83/103 in the same stroke. Recommended: readmit the
+three, keep the `*-head` files as auxiliary include targets only (no
+golden pairing in `cases/`), log as an S14-shaped denominator adjustment
+in reverse.
+
+## 5. Next session's plan — in order
+
+1. Rule + apply S19 (mechanical if ratified: move 3 pairs into `cases/`,
+   `*-head` files move as auxiliary targets, re-baseline).
+2. **The pools**, biggest first: §3.11 include (4 reds:
+   `includes`, `includes-with-ext-js`, `include-with-text`,
+   `include-only-text-body` — note the last is an include TARGET that also
+   stands as its own case; as a root it contains bare text with
+   interpolation, likely a §3.3 problem wearing §3.11's name), misc (4:
+   `html`, `xml`, `block-code`, `block-expansion`), attributes (3:
+   `classes`, `classes-empty`, `styles`), text (`text`, tagless lone-dot
+   block), mixins (2: `interpolated-mixin`, `mixin-at-end-of-file`,
+   `mixin.block-tag-behaviour` has the known spurious-`<p>` defect), plus
+   `comments`, `inline-tag`, `code.conditionals`, `tags.self-closing`.
+   (`inheritance.extend.include` is the permanent departure — never
+   counts.)
+3. Later: `deftemplate`, sci (must mirror S15's template-ns), CLJS matrix,
    vendor-vs-depend edamame.
 
-## 5. Working agreement (one refinement)
+## 6. Working agreement (unchanged, one observation)
 
-Ratchet green is the invariant; promote in the same commit; never loosen the
-comparator; golden/template adjustments only with a logged departure (or, for
-converter errors, a logged repair) — candidate edits go to the docket FIRST.
-**Refinement (rev. 10): a ratified rule can pre-answer a docket class** — the
-lossiness rule stands where per-item S-questions would have been; only its
-boundary cases ("grossly unexpected") travel back to Ricardo. Premises get
-verified at enforcement time. Spec records decisions with their why. One
-decision per exchange otherwise; Ricardo rules — and he rules well, sometimes
-before being asked.
+Ratchet green is the invariant; promote in the same commit; never loosen
+the comparator; golden/template adjustments only with a logged departure
+(or, for converter errors, a logged repair) — candidate edits go to the
+docket FIRST. A ratified rule can pre-answer a docket class (rev. 10);
+premises get verified at enforcement time. One decision per exchange
+otherwise; Ricardo rules — and rules in batch, fast, when the probe record
+is laid out plainly.
 
-## 6. Continuity notes
+## 7. Continuity notes
 
-Ricardo: software architect in Quito; bilingual; Borges-adjacent; prose over
-bullets; puns, Latin ("nihil obstat"). When in doubt, ask the S-question; he
-answers in batch — and reads minds occasionally (the lossiness rule was his
-phrasing adopted verbatim). Repo is public: clone `github.com/xrrocha/carlin`,
-install babashka, `bb ratchet` — cold-start proven twice (74/100 both times
-before touching anything).
+Ricardo: software architect in Quito; bilingual; Borges-adjacent; prose
+over bullets; puns, Latin ("nihil obstat"). Repo is public: clone
+`github.com/xrrocha/carlin`, install babashka, `bb ratchet` — cold-start
+proven three times (74, 74, 77 before touching anything). NOTE: `bb show`
+takes ids RELATIVE to `cases/` (`bb show filters.include.custom.carlin`,
+no `cases/` prefix) — a session lost twenty minutes to a blank `:error`
+from that; the harness swallows the message when the id misses.
 
 Lessons carried forward:
 
 - **The corpus finds bugs the spec cannot** (rev. 9).
 - **A printer is not a commodity when the goldens are documents** (rev. 9).
-- **Check a ruling's factual premises before enforcing it** (rev. 11) — S16
-  (c)'s proof: verified premises made the ruling trivial.
+- **Check a ruling's factual premises before enforcing it** (rev. 11).
 - **Records are maps, forever** (rev. 12, four sightings).
 - **Sessions die mid-flight; package early** (rev. 12) — honored again.
-- **A small integer can be the whole fix** (rev. 12).
 - **A lesson learned in one position recurs one position over** (rev. 13) —
-  prospectively: `yield`, the next bare word to meet the reader.
+  and the prophecy self-fulfilled benignly: `yield` was implemented as a
+  bare word token from the start, so the species never bit.
 - **A corpus case can mask its own bug** (rev. 13); pins use probe values
   where name ≠ value.
-- **Symmetry is not a safety argument** (rev. 14): when an escape's
-  rationale is aesthetic, ask what attack it closes.
-- **New: replication is the obvious meaning of "splice here" written
-  twice.** When a construct's repetition has a natural reading, adopt it and
-  hand the author the rope — police the language, not the parameterization.
+- **Symmetry is not a safety argument** (rev. 14).
+- **Replication is the obvious meaning of "splice here" written twice**
+  (rev. 15) — now also pug's meaning, per the probe.
+- **New: read the implementation, not just the output.** The probe's
+  decisive fact — pug's own `// todo: probably should deprecate` — was in
+  pug-linker's source, not in any rendered result. When behavior looks
+  accidental, the source usually says so out loud.

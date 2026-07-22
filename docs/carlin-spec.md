@@ -326,29 +326,57 @@ included template at its `yield` node — composition's parameterization, the
 include-side counterpart of inheritance's named blocks. `yield` is meaningful
 **only inside a file being included**; encountered anywhere else it is a
 positioned `:yield-outside-include` error, so top-level `yield` remains
-outside the language (the excluded `yield*` corpus family stays excluded).
+outside the language (of the excluded `yield*` corpus family, the `*-head`
+roots pin this error; the three includer-side cases would now pass and
+their readmission — a denominator change — is docketed as S19).
 The block-in-include ban (D7) is untouched: `yield` is composition's splice
 point, `block` is inheritance's, and the wall between them stands.
 
-Edge semantics (ratified 2026-07-22, rev. 10 — ahead of implementation):
+Edge semantics (ratified rev. 10; probed against pug 3.0.2 and **landed**,
+rev. 11, 2026-07-22):
 
-- **Multiple `yield`s: the body splices at EVERY yield found.** This is
-  carlin law regardless of what pug turns out to do (if pug differs, the
-  divergence is logged as a departure). The body's AST is replicated at each
-  splice point, so its code evaluates once *per site* at render time —
-  side-effecting bodies (an atom-bumping `- (let …)`) will run per splice.
-  That is the author's rope: replication is the obvious meaning of "splice
-  here" written twice, and the language does not police what the author
-  parameterizes with.
-- **The remaining edges follow pug, bounded by the lossiness rule** (see
-  rev. 10's note): pug's behavior — pinned by direct probe of pug 3.0.2
-  before implementation, never asserted from memory — is adopted verbatim
-  UNLESS it silently discards author content or is grossly unexpected, in
-  which case carlin raises a positioned error and the departure log records
-  the divergence. Concretely: a body on an included file with **no `yield`**
-  and a body on a **raw (`:kind :raw`) include** are author content with no
-  destination — if pug drops either silently, carlin errors instead. Probe
-  results land in this section when they land in code.
+- **Multiple `yield`s: the body splices at EVERY yield found.** Ratified as
+  carlin law ahead of the probe — and the probe then showed pug 3.0.2 does
+  exactly this, so the law is pug-faithful after all (no departure). The
+  body's AST is replicated at each splice point, so its code evaluates once
+  *per site* at render time — side-effecting bodies (an atom-bumping
+  `- (let …)`) will run per splice. That is the author's rope: replication
+  is the obvious meaning of "splice here" written twice, and the language
+  does not police what the author parameterizes with.
+- **A body with no destination is a positioned error.** A body on a **raw
+  (`:kind :raw`) include** or on an **`include:filter`** is
+  `:body-in-raw-include` — pug agrees ("Raw inclusion cannot contain a
+  block"), adopted verbatim. A body on a template include whose *fully
+  resolved* target contains **no `yield`** is `:body-without-yield` — a
+  **logged departure** (S17): pug does not discard here but buries the body
+  at the *deepest last block* of the included file, a landing site that is
+  an accident of the included file's shape (pug-linker's own source marks
+  the behavior with a deprecation todo). Camming content at an
+  unpredictable, context-dependent location is inadmissible.
+- **An unfed `yield` renders nothing** (pug-probed, adopted): including a
+  yield-bearing file without a body simply omits the splice point. Unfed
+  yields survive splicing untouched, so an *enclosing* include's body can
+  still land on them — pug's cascade, adopted: yield bubbles until fed.
+- **`yield` anatomy.** The directive fires only **bare** on its line, like
+  pug's lexer: `yield trailing text` is an ordinary tag named `yield`
+  (markup-agnosticism, §1 — the word is claimed only where the splice point
+  is meant). Children under a bare `yield` are `:yield-children` (pug
+  agrees: syntax error). A `tag: yield` expansion takes the body as the
+  tag's children.
+- **Yield legality follows the include EDGE, not the composed tree.**
+  `yield` is legal only in the source of a file reached via `include`
+  (transitively). It is `:yield-outside-include` in the root template —
+  including inside an include *body* written there — and in a file reached
+  via `extends`, even when the extending file was itself included: extends
+  is inheritance, include is composition, and `yield` belongs to
+  composition alone (D7's wall, seen from the other side).
+
+An `include:filter` may carry an **attrs map** between the filter name and
+the ref — `include:custom{:opt "val"} some/file` — the same surface a
+standalone filter gets (§3.12), read by the reader (it may span lines like
+any attr map; the ref follows on the map's closing line). The map is passed
+to the filter fn as its `attrs` argument. It is sought only when a filter
+name is present: a bare include's ref is never sniffed for braces.
 
 `block` nodes inside included files are a **positioned compile error** (§9, Q9):
 extends is inheritance, include is composition, and the two don't leak into each
@@ -1147,3 +1175,39 @@ code, and §3.11 is amended to match.
   working principle is to fix and complete everything in context while it is
   in context. Corpus edits still go to the docket first (rev. 12
   discipline) — riding along changes the session plan, not the paperwork.
+
+**Revision note (rev. 11).** Ruling 4 enforced — the last rev. 7 law is code.
+Probe-first honored: every §3.11 edge was pinned against pug 3.0.2 (npm
+package and pug-linker source, 2026-07-22) before implementation, never
+asserted from memory. Ratchet 77 → **80/100**, baselined, zero regressions
+(flips: `include.yield.nested`, `include-only-text`,
+`filters.include.custom`); spec suites 17 tests / 95 assertions / 0 failures.
+
+- **The probe record.** Multiple yields: pug splices at every yield — the
+  rev. 10 law turns out pug-faithful, no departure. Body on a raw or
+  filtered include: pug raises "Raw inclusion cannot contain a block" —
+  adopted verbatim as `:body-in-raw-include`. Unfed yields render nothing;
+  a nested include's unfed yields catch an enclosing body (the cascade) —
+  both adopted. `yield` with trailing text is a tag; with children, an
+  error — both adopted (`:yield-children`).
+- **S17 ruled and enforced** (the probe's one merely-surprising result,
+  returned to Ricardo per the lossiness rule): a body on a no-`yield`
+  include is `:body-without-yield`, a **logged departure**. Pug buries the
+  body at the deepest last block of the included file — not lossy, but
+  "camming content at an unpredictable context-dependent location is
+  inadmissible" (the ruling, verbatim), and pug-linker's own source marks
+  the behavior for deprecation.
+- **S18 ruled and applied**: `filters.include.custom` repaired from pug
+  attr syntax to `include:custom{:opt "val" :num 2}`; the case includes
+  itself, so the golden's embedded source line changed in consequence
+  (regenerated mechanically, verified byte-equal to the file). Repair +
+  repair-consequent golden edit, not a departure.
+- **Ride-along landed**: the include branch parses a filter-attrs map,
+  passed to the filter fn as `attrs` (§3.11/§3.12).
+- **`:include-children` retired**; children under `include` are the body.
+  New diagnostics: `:yield-outside-include`, `:yield-children`,
+  `:body-in-raw-include`, `:body-without-yield` — all pinned.
+- **S19 opened**: the three includer-side `yield*` exclusions
+  (`yield`, `yield-title`, `yield-before-conditional`) were probe-verified
+  green under the new law; readmitting them moves the denominator
+  (100 → 103) and awaits ruling.
