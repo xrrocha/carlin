@@ -152,7 +152,11 @@
 (defn- js-string
   "JSON string literal, SCRIPT-CONTEXT SAFE: < becomes \\u003C, which closes
   the </script> breakout that generic JSON emitters leave open (and
-  neutralizes <!-- along the way). > and & follow for symmetry."
+  neutralizes <!-- along the way). < ALONE carries that guard — `</script`
+  and `<!--` both ride on it — so > and & pass through untouched (S16 (a),
+  ratified 2026-07-22): the symmetric escapes bought no safety and cost
+  pug's `&amp;quot;` attribute shape (attrs-data), since in attribute
+  position the HTML escaper handles & downstream anyway."
   [s]
   (str dq
        (-> (str s)
@@ -161,9 +165,7 @@
            (str/replace "\n" "\\n")
            (str/replace "\r" "\\r")
            (str/replace "\t" "\\t")
-           (str/replace "<" "\\u003C")
-           (str/replace ">" "\\u003E")
-           (str/replace "&" "\\u0026"))
+           (str/replace "<" "\\u003C"))
        dq))
 
 (defn ->js

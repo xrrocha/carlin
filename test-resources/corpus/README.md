@@ -174,6 +174,35 @@ golden file and logging the departure, never by silently matching pug.
   NOTE for whoever works `mixin.block-tag-behaviour.carlin` next: its golden
   carries the same `I'm` — under rev. 7 now correct as vendored, no S12 edit
   pending; the case still has its unrelated defect (a spurious nested `<p>`).
+  **Third S12 golden edit: `attrs-data.html`** (`Let's` → `Let&#39;s`) —
+  apostrophe in ATTRIBUTE position, squarely inside S12's surviving scope
+  (attribute values remain escaped by the five-entity escaper). Docketed as
+  S16 (a)(i) per the rev. 12 discipline (candidate edits go to the docket
+  first even when existing law seems to cover them), Ricardo-ratified
+  2026-07-22. The case's other delta needed no edit: narrowing `js-string`
+  to `<` only (S16 (a)(ii), spec §6.3 / rev. 9) restored pug's `&amp;quot;`
+  shape at the source.
+- `attrs.js.html` — **golden edit, permanent departure (source order vs
+  pug's class hoisting).** Pug hoists `class` to the front of the rendered
+  attribute list; carlin renders attributes in textual source order (spec
+  §4.6, rev. 5 doctrine, threaded through codegen by rev. 8's ruling-3
+  enforcement) — owning the order is the point of owning the serializer.
+  Four occurrences edited: `<a class="button" href="/user/5">` →
+  `<a href="/user/5" class="button">`, matching the template's
+  `{:href … :class …}`. S8's shape: the wall is worth more than the case.
+  Ricardo-ratified (S16 (b)), 2026-07-22.
+- `mixin.attrs.carlin` — **two converter-error repairs, NOT departures**
+  (no law touched; goldens verified honest against the pugjs pug@3.0.2 tag).
+  (1) Pug's original `+centered#First Hello World` carries NO argument list —
+  `Hello World` is inline block text and `title` is undefined, so the `h1`
+  never renders; the converter's exact-arity repair pass had promoted the
+  inline text into the argument. Repaired to `+(centered nil)#First Hello
+  World`. (2) Pug's original `+foo(attr3='baz' …).thunk` has `.thunk` AFTER
+  the attribute list — textual class order `thing foo bar thunk`; the
+  converter had moved it ahead of the map. Repaired to
+  `+foo{:attr3 "baz" :data-foo val :data-bar (raw val) :class classes}.thunk`.
+  Both repaired forms were probe-verified green before the ruling.
+  Ricardo-ratified (S16 (c)), 2026-07-22.
 - `inheritance.extend.include.carlin` — **permanent departure, will never
   pass.** The layout includes `window.carlin`, which declares
   `block window-content`, and the page overrides it: pug allows extending a

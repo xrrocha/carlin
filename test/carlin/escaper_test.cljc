@@ -62,8 +62,9 @@
   (testing "raw wrapping a whole value still bypasses everything (§6.1 wins)"
     (is (= "<div data-x=\"{\"></div>"
            (rt/render-hiccup [:div {:data-x (rt/raw "{")}] {:mode :html}))))
-  (testing "the ->js \\u003C guard rides along harmlessly (§6.3)"
-    (is (= "<div data-s=\"[&quot;\\u003C/script\\u003E&quot;]\"></div>"
+  (testing "the ->js \\u003C guard rides along harmlessly (§6.3); > is the
+            HTML escaper's job now that js-string is narrowed to < (S16 (a))"
+    (is (= "<div data-s=\"[&quot;\\u003C/script&gt;&quot;]\"></div>"
            (rt/render-hiccup [:div {:data-s ["</script>"]}] {:mode :html})))))
 
 (deftest profiles

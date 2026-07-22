@@ -328,12 +328,27 @@ include-side counterpart of inheritance's named blocks. `yield` is meaningful
 positioned `:yield-outside-include` error, so top-level `yield` remains
 outside the language (the excluded `yield*` corpus family stays excluded).
 The block-in-include ban (D7) is untouched: `yield` is composition's splice
-point, `block` is inheritance's, and the wall between them stands. Edge
-semantics — the body's default destination when the included file has no
-`yield`, the treatment of multiple `yield`s, and a body attached to a raw
-(`:kind :raw`) include — are **to be pinned by direct probe of pug 3.0.2**
-before implementation, not asserted from memory; the probe results land in
-this section when they land in code.
+point, `block` is inheritance's, and the wall between them stands.
+
+Edge semantics (ratified 2026-07-22, rev. 10 — ahead of implementation):
+
+- **Multiple `yield`s: the body splices at EVERY yield found.** This is
+  carlin law regardless of what pug turns out to do (if pug differs, the
+  divergence is logged as a departure). The body's AST is replicated at each
+  splice point, so its code evaluates once *per site* at render time —
+  side-effecting bodies (an atom-bumping `- (let …)`) will run per splice.
+  That is the author's rope: replication is the obvious meaning of "splice
+  here" written twice, and the language does not police what the author
+  parameterizes with.
+- **The remaining edges follow pug, bounded by the lossiness rule** (see
+  rev. 10's note): pug's behavior — pinned by direct probe of pug 3.0.2
+  before implementation, never asserted from memory — is adopted verbatim
+  UNLESS it silently discards author content or is grossly unexpected, in
+  which case carlin raises a positioned error and the departure log records
+  the divergence. Concretely: a body on an included file with **no `yield`**
+  and a body on a **raw (`:kind :raw`) include** are author content with no
+  destination — if pug drops either silently, carlin errors instead. Probe
+  results land in this section when they land in code.
 
 `block` nodes inside included files are a **positioned compile error** (§9, Q9):
 extends is inheritance, include is composition, and the two don't leak into each
@@ -619,8 +634,10 @@ button{:hx-vals (->js {:id id})} Remove
 Domain, ruthlessly narrowed: maps with keyword/string keys, vectors and seqs,
 strings, numbers, booleans, nil → `null`; anything else is a positioned runtime
 error, never a guess. **Script-context safety is the point**: emitted strings
-escape `<` (as `\u003C`) and friends, closing the `</script>`-breakout injection
-that generic JSON emitters leave open by default. `->js` is the script-context
+escape `<` (as `\u003C`) — and `<` *only* (S16, rev. 9) — closing the
+`</script>`-breakout injection that generic JSON emitters leave open by
+default; `</script` and `<!--` both ride on `<`, so the formerly symmetric
+`>`/`&` escapes bought no safety and cost pug's `&amp;quot;` attribute shape. `->js` is the script-context
 sibling of the HTML escaper — the other half of the safety story that Q5's raw
 script blocks opened. Users with richer serialization needs bring their own
 library through `env`. Status: a parachute — rarely needed; when needed, oh boy.
@@ -1068,3 +1085,65 @@ fixed; and the docket reopens.
   call; a `.thunk` moved ahead of the attrs map), not golden defects — the
   goldens are pug's honest output and the doctrine already agrees with them.
   Rulings pending.
+
+**Revision note (rev. 9).** S16 ruled in batch — all three recommendations
+ratified (2026-07-22) — implemented, and closed. Ratchet 74 → 77
+(`attrs-data`, `attrs.js`, `mixin.attrs`), zero regressions, exactly the
+predicted flips.
+
+- **S16 (a) — two shapes, two instruments.** (i) The apostrophe in attribute
+  position is S12's ratified substance, correctly scoped this time:
+  `attrs-data`'s golden edited (`Let's` → `Let&#39;s`), logged under the S12
+  departure entry. (ii) `js-string` **narrowed to escape `<` only** (§6.3):
+  `<` alone carries the script-context guard — `</script` and `<!--` both
+  ride on it — so the symmetric `>`/`&` escapes were safety theater with a
+  cost, pug's `&amp;quot;` attribute shape. Dropping them restored that shape
+  with **no golden edit**; in attribute position the HTML escaper handles `&`
+  downstream anyway, and in script position neither `>` nor `&` opens
+  anything. The script-safety pins (which always pinned only `<`) pass
+  untouched; the one serializer ride-along pin updated to `&gt;`.
+- **S16 (b) — the doctrine outranks the golden.** Pug hoists `class` to the
+  front of the attribute list; carlin's rev. 5 source-order doctrine renders
+  attributes in textual order, and that is the point of owning the
+  serializer. `attrs.js`'s golden edited (`href` before `class`, four
+  occurrences), logged as a **permanent departure** — S8's shape: the wall is
+  worth more than the case.
+- **S16 (c) — two converter repairs, zero doctrine.** The rev. 13 premise
+  verification held: both residual deltas were converter artifacts in
+  carlin's *templates*, pug's goldens honest. Repaired to pug's actual
+  anatomy: `+(centered nil)#First Hello World` (inline text had been promoted
+  into the argument; `title` is undefined in pug's original) and
+  `+foo{…}.thunk` (the shorthand had been moved ahead of the attrs map;
+  textual order is `thing foo bar thunk`). Logged as **converter-error
+  repairs, not departures** — no law was touched, and both forms were
+  probe-verified before the ruling, per the rev. 11 lesson.
+
+The docket is empty. The last rev. 7 law awaiting enforcement is ruling 4
+(include-with-body at `yield`, §3.11) — probe pug first.
+
+**Revision note (rev. 10).** Three pre-rulings for ruling 4's enforcement
+session, Ricardo-ratified in batch 2026-07-22, ahead of implementation (the
+rev. 7 pattern). Ratchet untouched — 77/100 stands; this note is law without
+code, and §3.11 is amended to match.
+
+- **The lossiness rule, named.** "Pug-fidelity is a default, not a
+  constraint" (S8–S14) gains its operative boundary: **follow pug as
+  faithfully as possible unless its behavior is lossy or grossly
+  unexpected**, in which case carlin raises a positioned error and logs the
+  departure. This pre-ratifies the whole class: probe results that show pug
+  silently discarding author content do not need an S-docket round-trip —
+  the ruling is already made, only the departure entry remains to be
+  written. Probe results that are merely *surprising* still come back for
+  adjudication; "grossly unexpected" is Ricardo's call, not the session's.
+- **Multiple `yield`s splice everywhere** (§3.11). The include body's AST
+  replicates at every `yield` in the included file; evaluation is per splice
+  site, so side effects run per splice — explicitly the author's
+  responsibility, now explicitly in the spec. Ratified as carlin law
+  independent of the probe; a pug divergence, if found, is a logged
+  departure, not a reopened question.
+- **Include-with-filter rides along** in the same enforcement session: the
+  filter-attrs parse on the include branch and the corpus repairs to
+  `include:custom{:opt "val"}` share the context ruling 4 opens, and the
+  working principle is to fix and complete everything in context while it is
+  in context. Corpus edits still go to the docket first (rev. 12
+  discipline) — riding along changes the session plan, not the paperwork.

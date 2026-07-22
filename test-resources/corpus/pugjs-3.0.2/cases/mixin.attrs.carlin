@@ -17,7 +17,7 @@ mixin bottom []
     block
 
 body
-  +(centered "Hello World")#First
+  +(centered nil)#First Hello World
   +(centered "Section 1")#Second
     p Some important content.
   +(centered "Section 2")#Third.foo{:href "menu.html" :class "bar"}
@@ -43,7 +43,7 @@ mixin my-mixin [arg1 arg2 arg3 arg4]
   p= arg4
 
 - (let [val "<biz>" classes ["foo" "bar"]])
-  +foo.thunk{:attr3 "baz" :data-foo val :data-bar (raw val) :class classes}
+  +foo{:attr3 "baz" :data-foo val :data-bar (raw val) :class classes}.thunk
 
   //- Regression test for #1424
   +(work_filmstrip_item "work"){"data-profile" "profile" "data-creator-name" "name"}
