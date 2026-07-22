@@ -3,13 +3,34 @@
   tree from carlin.core → {:code :fn :doctype :mode :symbols}, one
   (fn [model env] hiccup) per template.
 
-  DEFERRAL CONTRACT: on meeting a construct outside the implemented set this
-  namespace throws ex-info carrying :carlin/defer — the seam's cue to bail
-  out WHOLESALE to carlin.legacy for that template. Deferral is never used
-  for genuine compile errors (those carry :carlin/error and propagate), and
-  outputs are never mixed: one template, one engine. Currently deferred:
-  filters, extends and named blocks (inheritance-merge), dynamic tags,
-  &attributes, shorthand/anatomy on mixin calls beyond a plain attrs map.
+  ERROR CONTRACT (S29): every construct this namespace cannot compile is a
+  positioned `:carlin/error` raised through carlin.cursor/fail!, exactly
+  like the front half's diagnostics. There is no second engine and no
+  bail-out: fail fast at compile time, always.
+
+  This REPLACES the deferral contract that stood until S29. Deferral existed
+  while carlin.legacy was still a working fallback: codegen threw
+  :carlin/defer, and the seam silently re-compiled the whole template on the
+  old engine. Once every legal construct compiled here, the only templates
+  still reaching legacy were MALFORMED ones — and legacy rendered them as
+  markup invented from a keyword (`when 1` outside a case became
+  `<when>1</when>`, an undefined `+nope` became the literal text `+nope`)
+  where pug 3.0.2 raises an error on every one. Silently emitting bogus
+  markup for input the compiler has already recognized as broken is the
+  \"grossly unexpected\" outcome the §7 lossiness rule exists to forbid, so
+  the five reachable paths became errors and legacy was retired:
+
+    :stray-when      `when` outside a case
+    :stray-default   `default` outside a case
+    :case-clause     a non-when/default child of a case
+    :undefined-mixin a call to a mixin defined nowhere (see below)
+    :anonymous-block an unnamed `block` outside a mixin
+
+  A sixth, `:extends`, is unreachable from a well-formed tree — carlin.core
+  folds inheritance before codegen — and is kept as a defensive assertion.
+  `unsupported-construct` is the catch-all for a node type that reaches `gen`
+  without a branch, which is an internal invariant failure rather than a
+  user error, but is still reported positioned rather than as a raw NPE.
 
   SERIALIZATION (step 3, landed): emitted code targets hiccup DATA with
   carlin.runtime/raw markers, and carlin.runtime/render-hiccup prints it —
@@ -17,8 +38,7 @@
   meant to be: a JVM differential-test oracle (§11). Escaping, attribute
   order, void/self-closing behavior and profiles are all carlin's now.
 
-  Text semantics mirror the goldens (and legacy where legacy is
-  golden-correct): #{expr} escaped interpolation, !{expr} raw, #[tag …]
+  Text semantics mirror the goldens: #{expr} escaped interpolation, !{expr} raw, #[tag …]
   nested-tag interpolation, \\-escape to render any of those literally;
   consecutive piped-text lines join with newline; dot blocks on
   :raw-text-tags (default #{:script :style}, Q5) emit raw with raw
@@ -26,12 +46,20 @@
   block comments emit verbatim (Q12)."
   (:require [clojure.string :as str]
             [carlin.core :as core]
+            [carlin.cursor :as cur]
             [carlin.platform :as platform]
             [carlin.runtime :as rt]))
 
-(defn- defer! [construct node]
-  (throw (ex-info (str "carlin: " (name construct) " deferred to legacy")
-                  {:carlin/defer construct :pos (:pos node)})))
+(defn- fail!
+  "The ONE error constructor for the back half (S29), delegating to
+  carlin.cursor/fail! so a codegen error is indistinguishable from a parse
+  error in shape: same {:carlin/error :key :line :col} data, same caret
+  excerpt. `ctx` carries the cursor of the template being compiled; `node`
+  supplies the position. Replaces the pre-S29 `defer!`, which threw an
+  unpositioned :carlin/defer sentinel for the seam to catch."
+  ([ctx class node] (fail! ctx class node nil))
+  ([ctx class node extra]
+   (cur/fail! (:cursor ctx) class (or (:pos node) {:line 1 :col 1}) extra)))
 
 ;; ---------------------------------------------------------------------------
 ;; text scanning: #{expr} !{expr} #[tag …], with backslash escapes
@@ -299,7 +327,7 @@
   (let [scrut (gensym "scrut")
         kids  (remove #(#{:comment :comment-silent} (:type %)) (:children node))
         _     (doseq [k kids]
-                (when-not (#{:when :default} (:type k)) (defer! :case-clause k)))
+                (when-not (#{:when :default} (:type k)) (fail! ctx :case-clause k)))
         clauses
         (loop [ks kids, pending [], out []]
           (if-let [k (first ks)]
@@ -349,7 +377,22 @@
 (defn- mixin-call-code [ctx node]
   (let [node  (thread-class-order node)
         arity (get (:mixins ctx) (:name node) ::absent)]
-    (when (= ::absent arity) (defer! :undefined-mixin node)) ; may live in an unmerged layout
+    ;; A call to a name defined NOWHERE. Fail fast, at compile time (S29).
+    ;;
+    ;; The comment that stood here until S29 read "may live in an unmerged
+    ;; layout" — a hedge against this pass running before `extends` had been
+    ;; folded, which would make a layout's mixin look absent and reject a
+    ;; LEGAL template. That premise is stale, and was stale when written down:
+    ;; §3.14 made carlin.core/resolve-template mutually recursive with
+    ;; splice-includes, so by the time compile-tree sees a tree, inheritance
+    ;; is merged base-upward, includes are spliced, and named blocks are
+    ;; dissolved. Probed at S29: a mixin defined in a layout and called from
+    ;; a child's block compiles and renders here; so does one arriving via
+    ;; include; and a layout mixin called with the wrong arity is caught
+    ;; EARLIER, by core/check-arity, positioned into the child. Nothing
+    ;; unmerged survives to this point, so ::absent means genuinely absent.
+    (when (= ::absent arity)
+      (fail! ctx :undefined-mixin node {:mixin (:name node)}))
     (let [inline  (inline-content ctx node)
           content (into (if (some? inline) [inline] [])
                         (children-code ctx node))
@@ -411,16 +454,26 @@
     :unless         (else-chain-code ctx node)
     :each           (each-code ctx node)
     :case           (case-code ctx node)
-    :when           (defer! :stray-when node)
-    :default        (defer! :stray-default node)
+    :when           (fail! ctx :stray-when node)
+    :default        (fail! ctx :stray-default node)
     :mixin-def      nil                                      ; hoisted separately
     :mixin-call     (mixin-call-code ctx node)
     :block          (if (and (:in-mixin? ctx) (nil? (:name node)))
                       `(when ~'block (~'block))              ; the yield point (Q10)
-                      (defer! :inheritance node))
-    :extends        (defer! :inheritance node)
+                      ;; An unnamed `block` outside a mixin has no yield to
+                      ;; bind to. Named blocks never arrive here — core's
+                      ;; dissolve-blocks removes them, whether or not the
+                      ;; template extends anything — so this is exactly
+                      ;; pug's "Anonymous blocks are not allowed unless they
+                      ;; are part of a mixin" (probed, pug 3.0.2).
+                      (fail! ctx :anonymous-block node))
+    ;; Unreachable from a well-formed tree: core folds `extends` before
+    ;; codegen runs, so a surviving :extends node is an internal invariant
+    ;; failure. Kept as a positioned assertion rather than deleted, so the
+    ;; day it fires it says where.
+    :extends        (fail! ctx :extends node)
     :filter         (filter-code ctx node)
-    (defer! type node)))
+    (fail! ctx :unsupported-construct node {:node-type type})))
 
 ;; ---------------------------------------------------------------------------
 ;; mixin hoisting (Q10/Q14): letfn, top level, `attributes` and `block` bound
@@ -503,12 +556,42 @@
 (defn compile-tree
   "Spliced, clause-attached tree → the compiled artifact
   {:code :fn :doctype :mode :symbols} (spec §5.2 shape, :deps added by the
-  caller). Throws :carlin/defer for constructs outside the implemented set."
-  [tree opts]
+  caller). Raises positioned :carlin/error (S29) for any construct it cannot
+  compile; `cursor` is the compiling template's cursor, used to position
+  those errors, and is required — without it a back-half error could not
+  name a line.
+
+  MIXIN-TABLE INVARIANT (S29, load-bearing — read before changing either
+  side). Two mixin tables exist in this codebase and they are built by
+  DIFFERENT walks:
+
+    carlin.core/walk-checks  collects :defs RECURSIVELY, at every depth
+    compile-tree (here)      collects :mixins from the TOP LEVEL only
+
+  A recursive collector and a top-level collector that must agree is exactly
+  the drift the rev. 13 lesson warns about — one scanner living in two
+  places. They cannot diverge here, but only because of a THIRD guard in a
+  different namespace: core's `:nested-mixin` check fails any `:mixin-def`
+  at depth > 0. Every definition that survives parsing is therefore
+  top-level by construction, and the two tables are necessarily equal.
+
+  So the top-level filter below is not an optimization and not an
+  assumption about typical templates — it is sound ONLY while
+  `:nested-mixin` holds. If mixin definitions are ever admitted below top
+  level (a plausible future relaxation, since pug's own scoping is looser),
+  this table silently stops seeing them, `arity` reads ::absent for a
+  perfectly legal call, and S29's :undefined-mixin rejects valid templates.
+  Whoever relaxes `:nested-mixin` must make this walk recursive in the same
+  commit. A diagnostics pin asserts `:nested-mixin` fires, so the guard this
+  depends on cannot be removed silently."
+  [tree opts cursor]
   (let [tree    (positionalize-mixins tree)
-        ctx     {:raw-text-tags (or (:raw-text-tags opts) #{:script :style})
+        ctx     {:cursor cursor
+                 :raw-text-tags (or (:raw-text-tags opts) #{:script :style})
                  :policy (or (:on-attr-conflict opts) :error)
                  :filters (rt/filter-registry (:filters opts))
+                 ;; TOP LEVEL ONLY — sound only while :nested-mixin holds.
+                 ;; See the MIXIN-TABLE INVARIANT above before changing this.
                  :mixins (into {} (comp (filter #(= :mixin-def (:type %)))
                                         (map (juxt :name :arity)))
                               tree)}

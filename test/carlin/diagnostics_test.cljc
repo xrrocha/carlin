@@ -1,7 +1,11 @@
 (ns carlin.diagnostics-test
   "Spec §8.3/§12.4 — the diagnostics corpus. Asserts error CLASS and POSITION
-  ({:carlin/error kw, :line n, :col n}), never message prose. Red until the
-  real compiler lands (the legacy adapter throws unclassified errors)."
+  ({:carlin/error kw, :line n, :col n}), never message prose, so wording may
+  evolve freely while the data contract holds.
+
+  Since S29 this covers BOTH halves of the pipeline: the back half no longer
+  bails out to carlin.legacy on constructs it cannot compile, it raises the
+  same positioned :carlin/error the front half does."
   (:require [clojure.test :refer [deftest is testing]]
             [carlin.api :as api]))
 
@@ -115,3 +119,63 @@
   (testing "line numbers point at the offender, not line 1"
     (let [d (err "p ok\np ok\na{:href \"x\"")]
       (is (= 3 (:line d))))))
+
+(deftest back-half-fails-fast
+  "S29 — the five constructs that used to bail out WHOLESALE to carlin.legacy,
+   which rendered them as markup invented from a keyword (`when 1` outside a
+   case became <when>1</when>; an undefined +nope became the literal text
+   `+nope`). pug 3.0.2 errors on every one. They are now positioned
+   :carlin/error like any front-half diagnostic, and legacy is retired.
+
+   Each pin puts the offender on line 2+ so a class that merely defaulted to
+   line 1 could not pass."
+  (testing "`when` outside a case"
+    (is (classed? (err "p a\nwhen 1\n  p hi") :stray-when)))
+  (testing "`default` outside a case"
+    (is (classed? (err "p a\ndefault\n  p hi") :stray-default)))
+  (testing "a non-when/default child of a case"
+    (is (classed? (err "case 1\n  p not-a-when") :case-clause)))
+  (testing "an unnamed block outside a mixin has no yield to bind to —
+            pug: 'Anonymous blocks are not allowed unless they are part of
+            a mixin'"
+    (is (classed? (err "p a\nblock\n  p hi") :anonymous-block)))
+  (testing "a call to a mixin defined nowhere, naming the mixin"
+    (let [d (err "p a\n+(nope 1)")]
+      (is (classed? d :undefined-mixin))
+      (is (= 'nope (:mixin d)))))
+  (testing "the bare spelling too — the rev. 13 lesson: a lesson learned in
+            one position recurs one position over"
+    (is (classed? (err "+nope") :undefined-mixin)))
+  (testing "and the errors are POSITIONED, not merely classed: the back half
+            now carries the compiling template's cursor"
+    (is (= 3 (:line (err "div\n  p ok\nwhen 1\n  p hi"))))))
+
+(deftest legal-templates-unaffected
+  "S29's converse, and the reason the ratchet did not move: fail-fast must
+   reject only what is broken. Each of these was probed as reaching codegen
+   with its mixin fully in hand."
+  (testing "a named block outside extends is dissolved, never :anonymous-block"
+    (is (nil? (err "block foo\n  p hi"))))
+  (testing "a legal mixin call compiles"
+    (is (nil? (err "mixin g [a]\n  p= a\n+(g 1)"))))
+  (testing "a mixin called BEFORE its definition still resolves (positional
+            redefinition, not declaration order)"
+    (is (nil? (err "+(later)\nmixin later []\n  p x")))))
+
+(deftest mixin-table-invariant
+  "S29 — the guard the :undefined-mixin check silently depends on.
+
+   carlin.core/walk-checks collects mixin definitions RECURSIVELY;
+   codegen/compile-tree collects them from the TOP LEVEL ONLY. Those two
+   walks must agree, and they can only agree because :nested-mixin forbids a
+   definition below depth 0. If that guard is ever relaxed without making
+   codegen's walk recursive, a legal call to a nested definition reads as
+   ::absent and S29 rejects a valid template.
+
+   This pin exists so the guard cannot be removed silently: it is not a test
+   of :nested-mixin for its own sake, it is the load-bearing half of the
+   arity and undefined-mixin machinery. Fix the class, then pin it."
+  (testing "a mixin definition below top level is refused at parse time"
+    (is (classed? (err "div\n  mixin inner []\n    p x") :nested-mixin)))
+  (testing "which is what makes codegen's top-level-only mixin table sound"
+    (is (classed? (err "div\n  mixin inner []\n    p x\n+(inner)") :nested-mixin))))

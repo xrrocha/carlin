@@ -779,6 +779,26 @@ form in a restrictive-four position, root-jail escape, unresolvable ref, include
 cycle, `yield` outside an included file, dangling else clause) all report this
 way, as do reader errors, rebased to template coordinates.
 
+**Both halves report identically (rev. 15, S29).** Diagnostics are not a
+front-half privilege. The code generator raises the same positioned
+`:carlin/error` through the same `carlin.cursor/fail!`, so a caller cannot
+tell from the shape of an error which pass produced it — and need not care.
+The back half's classes are `:stray-when` and `:stray-default` (a `when` or
+`default` outside a case), `:case-clause` (a case child that is neither),
+`:anonymous-block` (an unnamed `block` with no enclosing mixin to yield
+into), and `:undefined-mixin` (a call to a name defined nowhere, carrying
+`:mixin`). Two further classes are internal-invariant assertions rather than
+user errors, reported positioned so that the day they fire they say where:
+`:extends` (a surviving `extends` node, which inheritance-merge should have
+folded) and `:unsupported-construct` (a node type reaching `gen` with no
+branch).
+
+This replaced the **deferral contract**, under which the back half threw an
+unpositioned `:carlin/defer` sentinel and the seam silently recompiled the
+whole template on the retired `carlin.legacy` engine. See the rev. 15
+revision note for why that fallback had become a liability rather than a
+safety net.
+
 **Runtime** (JVM path): emitted list forms carry `^{:line n}` metadata and the
 template's key binds `*file*` during eval — the Clojure compiler honors both, so
 a runtime exception inside `#{(:title book)}` produces a stack frame pointing at
@@ -1341,3 +1361,96 @@ concerning inline `#[…]` interpolation (§3.3, §3.13).
 language.** Six inline spellings worked with no case exercising any of them,
 and a seventh was broken with none exercising it either. The corpus measures
 what it contains.
+
+**Revision note (rev. 15).** `carlin.legacy` is **retired**, and with it the
+deferral contract. S29 — ruled in batch, implemented and measured in one
+session; ratchet held at 101/104 with zero flips, spec suites 17/103 → 20/116.
+
+**The plan item's premise was false, and measuring it is what found the real
+bug.** Rev. 20 scheduled legacy's deletion as dead-code removal: "nothing
+defers to it any more." Instrumenting the seam over all 104 corpus cases
+confirmed the visible half of that — 101 compile on `:carlin`, three raise
+genuine `:carlin/error`, **zero** reach legacy. But six live `defer!` sites
+remained in the code generator, and the corpus contains no malformed
+templates, so it could not see them. Probed directly, five were reachable,
+and each produced markup invented from a keyword:
+
+| template | before S29 | pug 3.0.2 |
+|---|---|---|
+| `when 1` outside a case | `<when>1<p>hi</p></when>` | error |
+| `default` outside a case | `<default>…</default>` | error |
+| non-`when` clause in a case | `<case>1…</case>` | error |
+| bare `block` outside a mixin | `<block>…</block>` | error |
+| `+nope`, defined nowhere | literal text `+nope` | error |
+
+Legacy had no moat-keeper left to protect because it *was* the moat-keeper —
+for malformed input, and it kept the moat badly. Emitting a plausible-looking
+`<when>` element for input the compiler has already recognized as broken is
+precisely the **grossly unexpected** outcome the §7 lossiness rule exists to
+forbid, and pug agrees on every one. So the five became positioned errors
+(§8.3) and the fallback was deleted rather than preserved.
+
+**The governing rule, stated once so it stops being re-derived: whenever
+carlin can fail fast at compile time, it does.** Pug raises
+`:undefined-mixin`'s equivalent at *runtime*; carlin raises it at compile
+time, which is stricter and consistent with §3.13's existing doctrine that
+compile-time guarantees are the point — the same reasoning that rejected
+pug's absent-is-undefined for arity. This is a departure by strictness, not
+by semantics: no legal template changes meaning, which is why the ratchet did
+not move a single golden.
+
+**A stale comment was hiding a real invariant.** The `:undefined-mixin` site
+carried the hedge *"may live in an unmerged layout"* — a claim that this pass
+might run before `extends` was folded, which would make a layout's mixin look
+absent and reject a **legal** template. That premise was stale: §3.14 made
+`resolve-template` mutually recursive with `splice-includes`, so inheritance
+is merged base-upward, includes spliced and named blocks dissolved before the
+generator sees a tree. Probed four ways — a layout mixin called from a child's
+block renders; one arriving via include renders; a layout mixin called with
+the wrong arity is caught *earlier* by `check-arity`, positioned into the
+child; and only a name defined nowhere reaches the site. Checking a ruling's
+factual premises before enforcing it (rev. 11) is what turned a comment into
+a measurement.
+
+**What the investigation found underneath is worth more than the comment.**
+There are **two** mixin tables, built by different walks:
+`carlin.core/walk-checks` collects definitions **recursively**;
+`codegen/compile-tree` collects them from the **top level only**. A recursive
+collector and a top-level collector that must agree is exactly the drift
+rev. 13 warns about — one scanner in two places. They cannot diverge, but
+only because of a *third* guard in a different namespace: `:nested-mixin`
+forbids a definition below depth 0, so every surviving definition is
+top-level by construction and the tables are necessarily equal.
+
+That invariant is **load-bearing and was undocumented**. The top-level filter
+is not an optimization; it is sound only while `:nested-mixin` holds. Relax
+that guard — a plausible future move, since pug's own scoping is looser —
+and the table silently stops seeing nested definitions, `arity` reads
+`::absent` for a legal call, and S29's new error rejects valid templates.
+It is now stated at both sites and pinned: `mixin-table-invariant` asserts
+`:nested-mixin` fires, so the guard the arity machinery depends on cannot be
+removed silently. Mutation-testing the table confirmed the pins bite.
+
+**`carlin.api` stays**, against rev. 20's plan to fold it into
+`carlin.core`. It is the surface §5 *names* and the one three consumers
+already import (harness, spec suites, `bin/render`); a seam that adapts
+nothing is still a useful front door, and it houses `render`, which belongs
+to neither the parser nor the generator. Only its legacy branch is gone.
+`core/compile-ref`'s lazy `requiring-resolve` therefore stays too, and is
+now documented as **deliberate**: `api` requires `codegen` requires `core`,
+so a static require would close a cycle.
+
+**hiccup leaves the runtime dependencies**, completing the trajectory §13
+predicted. It remained only because legacy needed it; nothing under `src/`
+has referenced the library since carlin's own serializer landed. It stays a
+test dependency permanently, as the differential oracle (§12.3). Carlin's
+sole runtime dependency is now edamame.
+
+**Lesson: a fallback that only catches what is already broken is not a
+safety net.** Deferral earned its keep while the new engine was incomplete —
+it kept the corpus baselined through six sessions of feature-by-feature
+landing. The moment the last legal construct compiled, its remaining
+population was exactly the templates that should have been rejected, and it
+converted each of them into confident, wrong output. A fallback's value
+should be re-measured when the thing it backstops changes, not assumed to
+persist.

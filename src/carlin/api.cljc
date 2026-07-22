@@ -1,11 +1,17 @@
 (ns carlin.api
-  "The spec (§5) API surface, as the test battery consumes it.
+  "The spec (§5) API surface — carlin's public front door.
 
-  This namespace is the SEAM between the battery and the implementation.
-  Today it adapts the quarantined pre-refactor implementation (carlin.legacy)
-  so the corpus stays baselined; as the real passes land, each legacy/
-  delegation below is replaced — the live map of what's left — and the
-  battery itself never changes.
+  This namespace began as the SEAM between the battery and a half-built
+  implementation, adapting the quarantined pre-refactor engine so the corpus
+  could stay baselined while the real passes landed one at a time. That job
+  is finished: legacy is retired (S29) and nothing is adapted any more.
+
+  It is kept, rather than folded into carlin.core, because it is the surface
+  the spec NAMES in §5 and the one three consumers already import (the
+  harness, two spec suites, bin/render). A seam that adapts nothing is still
+  a useful front door: it keeps §5's names where §5 says they are, and it
+  holds `render` — which belongs to neither the parser nor the code
+  generator — in the one place a caller looks.
 
   Contract (carlin-spec.md §5):
     (compile-template source opts) -> {:fn (fn [model env] hiccup)
@@ -19,33 +25,28 @@
   opts: :name :resolver :filters :mode :raw-text-tags :on-attr-conflict :eval"
   (:require [carlin.core :as core]
             [carlin.codegen :as codegen]
-            [carlin.runtime :as rt]
-            [carlin.legacy :as legacy]))
+            [carlin.runtime :as rt]))
 
 (defn compile-template
+  "Source → compiled artifact. ONE engine, ONE outcome (S29): the front half
+  (cursor, positioned tree, structural diagnostics, include-splice,
+  clause-attachment, :deps) runs, then carlin.codegen compiles the whole
+  tree. Anything neither half can handle is a positioned :carlin/error that
+  propagates to the caller — carlin fails fast at compile time rather than
+  rendering something questionable.
+
+  Until S29 this function was a SEAM: codegen could throw :carlin/defer and
+  the whole template was silently re-compiled on carlin.legacy, the frozen
+  pre-refactor engine. That fallback is gone along with legacy.clj — by then
+  nothing legal deferred, and the only templates still reaching it were
+  malformed ones it rendered as invented markup. `:engine :carlin` is
+  retained in the returned map, now a constant, so callers that branched on
+  it keep working."
   [source opts]
-  ;; The real front half always runs: cursor, positioned tree, structural
-  ;; diagnostics, include-splice, clause-attachment, :deps. The back half is
-  ;; feature-by-feature (S2-S4): carlin.codegen compiles the whole template
-  ;; or throws :carlin/defer, and ONLY then does the seam bail out wholesale
-  ;; to the quarantined legacy engine on the ORIGINAL source. Genuine compile
-  ;; errors (:carlin/error) always propagate; outputs are never mixed.
-  (let [{:keys [tree deps]} (core/parse source opts)
+  (let [{:keys [tree deps cursor]} (core/parse source opts)
         deps (cond-> (set deps) (:name opts) (conj (:name opts)))]
-    (try
-      (-> (codegen/compile-tree tree opts)
-          (assoc :deps deps :engine :carlin))
-      (catch clojure.lang.ExceptionInfo e
-        (when-not (:carlin/defer (ex-data e)) (throw e))
-        (let [c (legacy/compile-template source)]
-          {:fn (:fn c)
-           :code (:code c)
-           :doctype (when (:doctype? c) "html")
-           :mode :html
-           :symbols (let [p (first (second (:code c)))]     ; [{:keys [...] :as model} env]
-                      (set (when (map? p) (:keys p))))
-           :deps deps
-           :engine :legacy})))))
+    (-> (codegen/compile-tree tree opts cursor)
+        (assoc :deps deps :engine :carlin))))
 
 (defn compile-ref
   [ref {:keys [resolver] :as opts}]

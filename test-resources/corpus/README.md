@@ -334,3 +334,32 @@ golden file and logging the departure, never by silently matching pug.
   argument, and the text becomes the mixin's block content, exactly as at
   line position and exactly as pug does. Ricardo-ratified (S27 option (a),
   S28), 2026-07-22.
+
+- **S29 — legacy retired; the back half fails fast** (2026-07-22,
+  Ricardo-ratified). No golden changed and no case was added: this entry
+  records a **behavior change the corpus could not observe**, which is why
+  it is written down here.
+
+  Rev. 20 scheduled `carlin.legacy`'s deletion as dead-code removal.
+  Instrumenting the seam across all 104 cases confirmed the corpus half of
+  that claim exactly — 101 compile on `:carlin`, three raise genuine
+  `:carlin/error`, **zero** reach legacy — so the ratchet was never at risk
+  and indeed did not move. But six `defer!` sites remained live in codegen,
+  and **the corpus contains no malformed templates**, so it could not see
+  them. Probed directly, five were reachable and each rendered markup
+  invented from a keyword: `when 1` outside a case became
+  `<when>1<p>hi</p></when>`, a `default` became `<default>…</default>`, a
+  stray case clause became `<case>…</case>`, a bare `block` became
+  `<block>…</block>`, and an undefined `+nope` became the literal text
+  `+nope`. pug 3.0.2 errors on all five (probed). They are now positioned
+  `:carlin/error` (§8.3) and legacy is deleted.
+
+  For the corpus specifically the lesson is the one rev. 20 closed on,
+  recurring one position over: **a frontier of zero reds is a statement
+  about the corpus, not about the language.** Every case here is a *legal*
+  template with a golden, so the whole battery is structurally blind to what
+  carlin does with *illegal* input. That territory belongs to the
+  diagnostics suite, which grew from 103 to 116 assertions here — eight pins
+  for the new classes and their positions, three asserting legal templates
+  still compile, and two pinning the `:nested-mixin` guard that codegen's
+  top-level-only mixin table silently depends on.

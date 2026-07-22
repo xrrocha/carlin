@@ -1120,8 +1120,13 @@
 #?(:clj
    (defn compile-ref
      "Public API (§5.1): compile the template `ref` resolves to, root pulled
-     through (:resolver opts). Delegates to the seam (carlin.api) lazily —
-     the API migrates fully into this namespace when carlin.legacy retires
-     and the codegen require can point this way without a cycle."
+     through (:resolver opts). Delegates to carlin.api lazily.
+
+     The laziness is NOT vestigial and must stay: carlin.api requires
+     carlin.codegen, which requires this namespace, so a static require here
+     would close a cycle. S29 retired carlin.legacy but deliberately kept
+     carlin.api as the §5 front door (it is what the spec names and what the
+     harness, the spec suites and bin/render import), so the cycle it would
+     otherwise create is still real. `requiring-resolve` remains the seam."
      [ref opts]
      ((requiring-resolve 'carlin.api/compile-ref) ref opts)))

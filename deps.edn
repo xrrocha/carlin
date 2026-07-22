@@ -1,12 +1,15 @@
 {:paths ["src"]
 
- ;; Runtime deps — trajectory (spec Q1/§13): hiccup LEAVES this map once
- ;; carlin's own serializer lands (zero runtime deps), and edamame ENTERS
- ;; (or is vendored — spec §13, still open). Until then, the legacy
- ;; implementation needs hiccup here.
+ ;; Runtime deps — trajectory (spec Q1/§13) COMPLETED at S29: hiccup has now
+ ;; LEFT this map. It stayed only because carlin.legacy needed it; carlin's
+ ;; own serializer landed at step 3, legacy was retired at S29, and nothing
+ ;; under src/ has referenced the library since. It remains a :test dep,
+ ;; permanently, as the differential oracle (§12.3).
+ ;;
+ ;; edamame is the one remaining runtime dep (entered with the cursor
+ ;; refactor; §13 vendor-vs-depend still open).
  :deps {org.clojure/clojure {:mvn/version "1.12.1"}
-        hiccup/hiccup       {:mvn/version "2.0.0"}   ; -> moves to :test with the new serializer
-        borkdude/edamame    {:mvn/version "1.4.28"}} ; entered with the cursor refactor (§13: vendor-vs-depend still open)
+        borkdude/edamame    {:mvn/version "1.4.28"}}
 
  :aliases
  {;; JVM test classpath + runner. hiccup lives here PERMANENTLY as the
