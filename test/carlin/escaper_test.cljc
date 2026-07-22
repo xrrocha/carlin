@@ -45,6 +45,27 @@
     (is (= "<foo class=\"&lt;%= bar %&gt;\"></foo>"
            (rt/render-hiccup [:foo {:class "<%= bar %>"}] {:mode :html})))))
 
+(deftest json-attribute-values
+  (testing "the pipeline shape (§3.5, rev. 7 ruling 2): ->js first, escaper second"
+    (is (= "<button hx-vals=\"{&quot;id&quot;:7}\"></button>"
+           (rt/render-hiccup [:button {:hx-vals {:id 7}}] {:mode :html})))
+    (is (= "<div data-user=\"{&quot;name&quot;:&quot;tobi&quot;}\"></div>"
+           (rt/render-hiccup [:div {:data-user {:name "tobi"}}] {:mode :html}))))
+  (testing "vectors and seqs JSON-encode too"
+    (is (= "<div data-xs=\"[1,2,3]\"></div>"
+           (rt/render-hiccup [:div {:data-xs [1 2 3]}] {:mode :html}))))
+  (testing ":style is exempt — maps stay CSS, strings pass through"
+    (is (= "<div style=\"color:red\"></div>"
+           (rt/render-hiccup [:div {:style {:color "red"}}] {:mode :html})))
+    (is (= "<div style=\"color:red\"></div>"
+           (rt/render-hiccup [:div {:style "color:red"}] {:mode :html}))))
+  (testing "raw wrapping a whole value still bypasses everything (§6.1 wins)"
+    (is (= "<div data-x=\"{\"></div>"
+           (rt/render-hiccup [:div {:data-x (rt/raw "{")}] {:mode :html}))))
+  (testing "the ->js \\u003C guard rides along harmlessly (§6.3)"
+    (is (= "<div data-s=\"[&quot;\\u003C/script\\u003E&quot;]\"></div>"
+           (rt/render-hiccup [:div {:data-s ["</script>"]}] {:mode :html})))))
+
 (deftest profiles
   (testing "void elements: html vs xml (§7.2)"
     (is (= "<br>"   (rt/render-hiccup [:br] {:mode :html})))

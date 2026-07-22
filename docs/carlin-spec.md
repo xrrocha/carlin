@@ -688,6 +688,18 @@ Every pass is tree → tree except the ends. Every node carries
 | `evaluate` | `eval` (or sci) | `deftemplate` macro path, or sci for runtime compilation |
 | `resolve-source` | caller's resolver | resolver at macro time; preloaded map at runtime |
 | `known-symbol?` | `resolve` / sci ctx | `cljs.analyzer.api` in macro mode |
+| `template-ns` | dedicated namespace (clojure.core + `raw`/`->js`) | sci ctx / analyzer env exposing the same vocabulary |
+
+`template-ns` (S15) is the namespace template expressions resolve and evaluate
+against: clojure.core plus exactly `raw` and `->js`, referred from
+`carlin.runtime`. `evaluate` binds `*ns*` to it and `known-symbol?` resolves
+against it, so analysis and evaluation agree by construction. This is a design
+position, not a convenience: `raw` and `->js` are *ambient vocabulary via
+namespace mechanics*, never codegen symbol rewriting — user names stay user
+data (rev. 4 hygiene), lexical shadowing still works, and templates no longer
+resolve against whatever `*ns*` the caller happened to be in. Any sci or CLJS
+evaluation strategy must mirror it (a context exposing the same two names) so
+the namespaces don't drift.
 
 edamame (pure cljc; the reader under sci and babashka) replaces
 `PushbackReader`: one-form reads with `:row`/`:col` metadata — positions for
@@ -969,7 +981,11 @@ enforcement; the next session implements them in the order given.
   The two semantic-departure goldens edited under S12 both live in attribute
   position, where escaping still applies; they remain authoritative and must
   stay green. The departure log gets a scope-narrowing annotation, not a
-  reversal.
+  reversal. *(Erratum, rev. 8: the attribute-position claim was wrong for
+  `inheritance.alert-dialog` — its `I&#39;m` was text position, a workaround
+  this very ruling abolishes; the golden was reverted to pug's vendored
+  original. See the departure log's scope-narrowing annotation, which is the
+  authoritative record. The `attrs.carlin` edit stands.)*
 - **Collection attribute values are JSON** (§3.5, via §6.3's `->js`).
   Pug-fidelity default, but more decisively: JSON-in-`data-*` is what htmx and
   Alpine actually parse out of attributes, so pug's behavior is the useful

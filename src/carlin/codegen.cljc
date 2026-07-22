@@ -151,6 +151,31 @@
 (defn- body-code [ctx node]
   (splice (children-code ctx node)))
 
+(defn- thread-class-order
+  "Ruling 3 — §4.6's source-order doctrine one level down: class tokens
+  accumulate in TEXTUAL source order. When shorthand classes and a map
+  :class coexist, split the shorthands around the map's position (the
+  parser records :classes-before-attrs) and fold the trailing ones after
+  the map's own value: a.foo{:class \"bar\"}.baz → class=\"foo bar baz\".
+  Applied before any consumer reads :classes or :attrs; downstream
+  machinery (keyword suffix, shorthand-map, render-attrs' hoist,
+  class-tokens' recursive flatten) then produces the right order
+  unchanged. A bug fix under existing law (rev. 5), not a departure."
+  [node]
+  (let [classes (:classes node)
+        attrs   (:attrs node)]
+    (if (and (seq classes) (map? attrs) (contains? attrs :class))
+      (let [n    (or (:classes-before-attrs node) (count classes))
+            pre  (vec (take n classes))
+            post (drop n classes)
+            v    (:class attrs)]
+        (assoc node
+               :classes pre
+               :attrs   (if (seq post)
+                          (assoc attrs :class (vec (cons v post)))
+                          attrs)))
+      node)))
+
 (defn- shorthand-suffix [node]
   (str (apply str (map #(str "#" (:name %)) (:ids node)))
        (apply str (map #(str "." %) (:classes node)))))
@@ -223,7 +248,8 @@
       (:self-close? node) ((fnil assoc {}) rt/self-close-key true))))
 
 (defn- tag-code [ctx node]
-  (let [amp?   (some? (:amp-attrs node))
+  (let [node   (thread-class-order node)
+        amp?   (some? (:amp-attrs node))
         inline (inline-content ctx node)
         attrs  (if amp? (merged-attrs-code ctx node) (tag-attrs node))]
     (cond-> [(tag-keyword node (not amp?))]
@@ -318,7 +344,8 @@
     (not-empty attrs)))
 
 (defn- mixin-call-code [ctx node]
-  (let [arity (get (:mixins ctx) (:name node) ::absent)]
+  (let [node  (thread-class-order node)
+        arity (get (:mixins ctx) (:name node) ::absent)]
     (when (= ::absent arity) (defer! :undefined-mixin node)) ; may live in an unmerged layout
     (let [inline  (inline-content ctx node)
           content (into (if (some? inline) [inline] [])

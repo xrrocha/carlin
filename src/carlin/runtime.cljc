@@ -176,6 +176,11 @@
     (boolean? x) (str x)
     (number? x)  (str x)
     (string? x)  (js-string x)
+    ;; records are maps, forever (fourth sighting, preempted): a Raw would
+    ;; sail down the map? branch and JSON-encode as {"s":...}. It is a
+    ;; serializer marker, not JSON data — error, never a guess.
+    (raw? x)     (throw (ex-info "->js: (raw ...) is a serializer marker, not JSON data"
+                                 {:carlin/error :unsupported-js-value :value x}))
     (map? x)
     (str "{"
          (str/join ","
@@ -229,8 +234,12 @@
     (raw? v)     (:s v)
     (= :class k) (str/join " " (map #(if (raw? %) (:s %) (escape-attr %))
                                     (class-tokens v)))
-    (map? v)     (escape-attr (css-value v))
-    (coll? v)    (escape-attr (str/join " " v))
+    ;; :style keeps CSS rendering (§3.5); every OTHER map or coll is JSON via
+    ;; ->js, THEN the attribute escaper — ->js first, escaper second, which is
+    ;; what produces the `&quot;` shape (rev. 7 ruling 2).
+    (= :style k) (escape-attr (if (map? v) (css-value v) (str v)))
+    (map? v)     (escape-attr (->js v))
+    (coll? v)    (escape-attr (->js v))
     (keyword? v) (escape-attr (name v))
     :else        (escape-attr (str v))))
 

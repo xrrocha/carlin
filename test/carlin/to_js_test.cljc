@@ -21,7 +21,10 @@
   (testing "never a guess (§6.3)"
     (is (thrown? Exception (rt/->js 'sym)))
     (is (thrown? Exception (rt/->js #{1})))
-    (is (thrown? Exception (rt/->js (fn []))))))
+    (is (thrown? Exception (rt/->js (fn [])))))
+  (testing "records are maps, forever: Raw is a serializer marker, never JSON"
+    (is (thrown? Exception (rt/->js (rt/raw "<b>"))))
+    (is (thrown? Exception (rt/->js {:x (rt/raw "<b>")})))))
 
 (deftest script-context-safety
   (testing "</script> breakout is closed: < escapes to \\u003C"

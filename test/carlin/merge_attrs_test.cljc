@@ -2,7 +2,11 @@
   "Spec §4.6 — the merge contract. Classes always additive; scalars per
   :on-attr-conflict; source order shorthand -> attrs map -> &attributes."
   (:require [clojure.test :refer [deftest is testing]]
+            [carlin.api :as api]
             [carlin.runtime :as rt]))
+
+(defn- render1 [source]
+  (api/render (api/compile-template source {:name "t.carlin"}) {}))
 
 (defn- m [policy short attrs amp] (rt/merge-attrs policy short attrs amp))
 
@@ -16,6 +20,21 @@
            (m :error nil {:class ["x" ["y"]]} {:class {:active true :off false}}))))
   (testing "classes are OUTSIDE the policy — no conflict under :error"
     (is (map? (m :error {:class ["a"]} {:class "b"} {:class "c"})))))
+
+(deftest class-order-is-textual
+  (testing "the ruling-3 witness: shorthand, map, shorthand"
+    (is (= "<a class=\"foo bar baz\"></a>"
+           (render1 "a.foo{:class \"bar\"}.baz"))))
+  (testing "map before shorthand: class sits at the map's position"
+    (is (= "<a class=\"bar baz\"></a>"
+           (render1 "a{:class \"bar\"}.baz"))))
+  (testing "class ATTRIBUTE placement is source order too (rev. 5, one level
+            up): the first class source precedes :href, so class renders first"
+    (is (= "<a class=\"foo bar\" href=\"/x\"></a>"
+           (render1 "a.foo{:href \"/x\" :class \"bar\"}"))))
+  (testing "&attributes stays last (§4.6 source order across ALL sources)"
+    (is (= "<div class=\"a b c d e\"></div>"
+           (render1 "div.a{:class [\"b\" \"c\"]}.d&attributes {:class \"e\"}")))))
 
 (deftest scalar-policy-matrix
   (testing ":error — runtime conflict throws positioned ex-info"

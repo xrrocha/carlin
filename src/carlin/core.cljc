@@ -162,7 +162,11 @@
             (cur/fail! cursor :attr-conflict {:line line :col col}
                        {:attr :id :shorthand (first (:ids a))}))
           (recur end-line end-col
-                 (assoc a :attrs form :attrs-pos {:line line :col col})))
+                 (assoc a :attrs form :attrs-pos {:line line :col col}
+                        ;; ruling 3 (§4.6): class tokens accumulate in TEXTUAL
+                        ;; source order, so codegen needs to know where the
+                        ;; map sat among the .class shorthands
+                        :classes-before-attrs (count (:classes a)))))
 
         ;; &attributes expr — the expression ends on its line (§3.1 corollary)
         (str/starts-with? rem "&attributes")
