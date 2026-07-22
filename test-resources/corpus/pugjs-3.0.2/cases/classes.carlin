@@ -2,7 +2,7 @@ a{:class ["foo" "bar" "baz"]}
 
 
 
-a.foo.baz{:class "bar"}
+a.foo{:class "bar"}.baz
 
 
 

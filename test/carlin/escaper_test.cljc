@@ -55,10 +55,17 @@
     (is (= "<div data-xs=\"[1,2,3]\"></div>"
            (rt/render-hiccup [:div {:data-xs [1 2 3]}] {:mode :html}))))
   (testing ":style is exempt — maps stay CSS, strings pass through"
-    (is (= "<div style=\"color:red\"></div>"
+    ;; Pug 3.0.2, probed 2026-07-22: a style MAP renders `k:v;` per pair,
+    ;; trailing semicolon included; a style STRING passes through untouched.
+    ;; The original pin asserted no terminator — written from assumption,
+    ;; never probed (S25). The implementation was right; the pin was wrong.
+    (is (= "<div style=\"color:red;\"></div>"
            (rt/render-hiccup [:div {:style {:color "red"}}] {:mode :html})))
     (is (= "<div style=\"color:red\"></div>"
-           (rt/render-hiccup [:div {:style "color:red"}] {:mode :html}))))
+           (rt/render-hiccup [:div {:style "color:red"}] {:mode :html})))
+    ;; an empty style map is omitted, like an empty class (same probe run)
+    (is (= "<div></div>"
+           (rt/render-hiccup [:div {:style {}}] {:mode :html}))))
   (testing "raw wrapping a whole value still bypasses everything (§6.1 wins)"
     (is (= "<div data-x=\"{\"></div>"
            (rt/render-hiccup [:div {:data-x (rt/raw "{")}] {:mode :html}))))

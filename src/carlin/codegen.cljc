@@ -47,15 +47,24 @@
          (dec end-col)))))
 
 (defn- matching-bracket
-  "Index of the ] closing an already-open [ at the front of s."
+  "Index of the ] closing an already-open [ at the front of s. STRING-AWARE:
+  a bracket inside a double-quoted Clojure string literal is content —
+  `#[- (let [foo \"foo]\"])]` closes at the last ], not inside the string
+  (the rev. 13 species, one position over: a bare scan meeting reader
+  syntax must know the reader's strings)."
   [^String s]
-  (loop [i 0, depth 0]
+  (loop [i 0, depth 0, in-str? false]
     (when (< i (count s))
       (let [c (nth s i)]
         (cond
-          (= c \[) (recur (inc i) (inc depth))
-          (= c \]) (if (zero? depth) i (recur (inc i) (dec depth)))
-          :else    (recur (inc i) depth))))))
+          in-str?  (cond
+                     (= c \\) (recur (+ i 2) depth true)     ; escape: skip next
+                     (= c \") (recur (inc i) depth false)
+                     :else    (recur (inc i) depth true))
+          (= c \") (recur (inc i) depth true)
+          (= c \[) (recur (inc i) (inc depth) false)
+          (= c \]) (if (zero? depth) i (recur (inc i) (dec depth) false))
+          :else    (recur (inc i) depth false))))))
 
 (defn- scan-text
   "Text → pieces: strings | {:expr form} | {:raw form} | {:node n}.
@@ -131,10 +140,17 @@
     1 (first codes)
     (cons `list codes)))
 
-(defn- text-node? [n] (= :text (:type n)))
+(defn- text-node?
+  "A node whose rendering is a text line: piped text, or a literal markup
+  line (pug 3.0.2, probed 2026-07-22: consecutive text-html lines join with
+  newlines exactly as piped lines do). Verbatim raw-include splices carry
+  whole files and stay out of the line-join game."
+  [n]
+  (or (= :text (:type n))
+      (and (= :literal-html (:type n)) (not (:verbatim? n)))))
 
 (defn- children-code
-  "Children → code vector; consecutive piped-text siblings join with a
+  "Children → code vector; consecutive text-line siblings join with a
   newline (pug text-block semantics — the goldens' line breaks)."
   [ctx node]
   (let [kids (:children node)]
@@ -387,7 +403,16 @@
     :text-block     (text-code ctx :escaped (:text (:body node)) (:pos node))
     :literal-html   (if (:verbatim? node)
                       `(rt/raw ~(:text node))
-                      (text-code ctx :escaped (:text node) (:pos node)))
+                      ;; deeper-indented lines under a literal markup line
+                      ;; are its children; pug (probed 2026-07-22) renders
+                      ;; them newline-joined, indentation stripped — the
+                      ;; parser already stripped it (content starts at the
+                      ;; line's own head)
+                      (let [own  (text-code ctx :escaped (:text node) (:pos node))
+                            kids (children-code ctx node)]
+                        (if (seq kids)
+                          (splice (into [own] (mapcat (fn [c] ["\n" c])) kids))
+                          own)))
     :buffered       (if (:raw? node) `(rt/raw (str ~(:form node))) (:form node))
     :code           (if (seq (:children node))
                       (if (:form node)
@@ -412,6 +437,36 @@
 
 ;; ---------------------------------------------------------------------------
 ;; mixin hoisting (Q10/Q14): letfn, top level, `attributes` and `block` bound
+
+(defn- positionalize-mixins
+  "Pug redefinition is POSITIONAL, not last-wins: a call site uses the
+  definition in force at its source position (`mixin.block-tag-behaviour`
+  is the golden proof; rev. 4's 'last definition wins' premise measured
+  wrong, S24). letfn wants one binding per name, so later same-name
+  definitions get a __N suffix and every call — top-level or nested,
+  including inside mixin bodies — is rewritten to the name current at its
+  own source position. A definition sees itself under its new name, so
+  self-recursion binds to the definition being written."
+  [tree]
+  (let [seen (volatile! {})
+        nth* (volatile! {})]
+    (letfn [(rewrite [n]
+              (let [n (cond-> n
+                        (and (= :mixin-call (:type n)) (:name n))
+                        (as-> m (let [nm (get @seen (:name m) (:name m))]
+                                  (cond-> (assoc m :name nm)
+                                    (:call m) (assoc-in [:call :name] nm)))))
+                    n (cond-> n (:expanded n) (update :expanded rewrite))]
+                (update n :children #(mapv rewrite %))))
+            (top [n]
+              (if (and (= :mixin-def (:type n)) (:name n))
+                (let [nm  (:name n)
+                      k   (get (vswap! nth* update nm (fnil inc 0)) nm)
+                      nm' (if (> k 1) (symbol (str nm "__" k)) nm)]
+                  (vswap! seen assoc nm nm')
+                  (rewrite (assoc n :name nm')))
+                (rewrite n)))]
+      (mapv top tree))))
 
 (defn- hoist-mixins
   "Top-level :mixin-def nodes → letfn bindings. Each mixin becomes
@@ -463,7 +518,8 @@
   {:code :fn :doctype :mode :symbols} (spec §5.2 shape, :deps added by the
   caller). Throws :carlin/defer for constructs outside the implemented set."
   [tree opts]
-  (let [ctx     {:raw-text-tags (or (:raw-text-tags opts) #{:script :style})
+  (let [tree    (positionalize-mixins tree)
+        ctx     {:raw-text-tags (or (:raw-text-tags opts) #{:script :style})
                  :policy (or (:on-attr-conflict opts) :error)
                  :filters (rt/filter-registry (:filters opts))
                  :mixins (into {} (comp (filter #(= :mixin-def (:type %)))
@@ -483,5 +539,9 @@
     {:code    code
      :fn      (platform/evaluate code)
      :doctype doctype
-     :mode    :html
+     ;; :mode carries the USER'S override only (§7.2: ':mode overrides the
+     ;; profile'); when absent the doctype selects the profile at render.
+     ;; The old hardcoded :html clobbered `doctype xml` back to the HTML
+     ;; void table — <link>…</link> lost its children (the xml case).
+     :mode    (:mode opts)
      :symbols (set params)}))

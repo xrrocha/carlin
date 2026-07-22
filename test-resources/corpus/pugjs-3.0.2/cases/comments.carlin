@@ -21,7 +21,7 @@ ul
 
 //if IE lt 9
   // inline
-  script{:src "/lame.js"}
+  script(src='/lame.js')
   // end-inline
 
 p five

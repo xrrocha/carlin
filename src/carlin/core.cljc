@@ -60,9 +60,16 @@
   nil when nothing was captured."
   [cursor opener-indent from-line]
   (let [end  (skip-raw cursor opener-indent from-line)
+        eof? (> end (cur/line-count cursor))
         ls   (mapv #(or (cur/line-at cursor %) "") (range from-line end))
-        ;; drop trailing blank lines (the gap before the next sibling)
-        ls   (loop [v ls] (if (and (seq v) (str/blank? (peek v))) (recur (pop v)) v))
+        ;; trailing blank lines BELONG to the block — pug 3.0.2, probed
+        ;; 2026-07-22: each renders as a newline in dot blocks, comment
+        ;; bodies, and filter input alike. Only at EOF do they vanish
+        ;; (probed likewise) — there they are the file's own trailing
+        ;; whitespace, not the gap before a dedent boundary.
+        ls   (if eof?
+               (loop [v ls] (if (and (seq v) (str/blank? (peek v))) (recur (pop v)) v))
+               ls)
         base (some->> (remove str/blank? ls) seq (map indent-of) (reduce min))
         cut  (fn [s] (if (str/blank? s) "" (subs s (min base (indent-of s)))))]
     {:text        (when base (str/join "\n" (map cut ls)))
@@ -335,6 +342,16 @@
       (str/starts-with? content "<")
       {:node (node :literal-html :text content) :consumed (next+ (inc line))}
 
+      ;; tagless lone-dot text block (§3.4): a `.` ALONE on its line opens a
+      ;; dot block with no tag — the captured text splices at this position.
+      ;; Pug 3.0.2 (probed 2026-07-22): dedented, trailing blank kept, empty
+      ;; block renders nothing. `.foo` (a word char after the dot) remains
+      ;; the div shorthand and never reaches this branch.
+      (= "." (str/trimr content))
+      (let [cap (capture-raw cursor indent (inc line))]
+        {:node (node :text-block :body cap)
+         :consumed (next+ (:next-line cap))})
+
       ;; buffered code at line start (§3.6) — multi-line permitted
       (str/starts-with? content "!=")
       (let [{:keys [form end-line]} (read-source-form cursor line (+ col 2))]
@@ -492,8 +509,13 @@
             "else"
             (let [after (str/triml (subs content (count kw)))]
               (if (str/starts-with? after "if")
+                ;; :else-if? carries PRESENCE separately from the form —
+                ;; `else if false` / `else if nil` are legal conditions
+                ;; whose forms are falsy (the corpus writes exactly this),
+                ;; so truthiness of the form cannot mean "this is an
+                ;; else-if" (else-if-falsy bug, rev. 13)
                 (let [r (read-line-form cursor line (+ (arg-col) 2))]
-                  {:node (node :else :else-if (:form r))
+                  {:node (node :else :else-if? true :else-if (:form r))
                    :consumed (next+ (inc line))})
                 {:node (node :else) :consumed (next+ (inc line))}))
 
@@ -658,10 +680,17 @@
       {:cursor cursor :tree tree :defs defs
        :calls  (mapv #(assoc % :cursor cursor) calls)})))
 
-(defn- block-nodes [tree]
+(defn- block-nodes
+  "Every :block node in `tree` EXCEPT those inside mixin bodies: an unnamed
+  `block` inside a mixin is that mixin's yield point (Q10), legal wherever
+  the mixin travels — including through include (`mixin-at-end-of-file`).
+  Only blocks in the include's own flow are the D7 composition leak."
+  [tree]
   (letfn [(walk [acc n]
-            (let [acc (if (= :block (:type n)) (conj acc n) acc)]
-              (reduce walk acc (node-kids n))))]
+            (if (= :mixin-def (:type n))
+              acc
+              (let [acc (if (= :block (:type n)) (conj acc n) acc)]
+                (reduce walk acc (node-kids n)))))]
     (reduce walk [] tree)))
 
 (defn- add-dep [state key]
@@ -961,7 +990,7 @@
                                    (drop-while #(comment? (nth acc %)))
                                    first)
                        prev   (when prev-i (nth acc prev-i))
-                       clause (if (:else-if n)
+                       clause (if (:else-if? n)
                                 {:type :if :form (:else-if n) :pos (:pos n)
                                  :indent (:indent n) :children (:children n)}
                                 nil)]
@@ -972,7 +1001,7 @@
                                     (or clause {:type :else-body :pos (:pos n)
                                                 :children (:children n)})))
 
-                     (and prev (= :each (:type prev)) (nil? (:else-if n)))
+                     (and prev (= :each (:type prev)) (not (:else-if? n)))
                      (assoc acc prev-i (assoc prev :else-children (:children n)))
 
                      :else

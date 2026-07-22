@@ -1,5 +1,5 @@
 ul
-  li: a(href='#') foo
-  li: a(href='#') bar
+  li: a{:href "#"} foo
+  li: a{:href "#"} bar
 
 p baz

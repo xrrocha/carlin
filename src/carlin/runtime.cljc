@@ -228,8 +228,12 @@
         cls  (map second (re-seq #"\.([^#.]+)" s))]
     [base id cls]))
 
-(defn- css-value [m]
-  (str/join ";" (map (fn [[k v]] (str (name k) ":" v)) m)))
+(defn- css-value
+  "A :style MAP renders as pug renders a style object: `k:v;` per pair,
+  trailing semicolon included (styles' golden: string values pass through
+  untouched, map values gain the terminator)."
+  [m]
+  (apply str (map (fn [[k v]] (str (name k) ":" v ";")) m)))
 
 (defn- attr-value-str [k v]
   (cond
@@ -262,7 +266,16 @@
                        (seq attrs)))]
     (apply str
            (for [[k v] pairs
-                 :when (and (some? v) (not (false? v)))
+                 :when (and (some? v) (not (false? v))
+                            ;; a class with NO tokens is omitted entirely —
+                            ;; pug 3.0.2 (probed 2026-07-22): class='', [],
+                            ;; [''] all render a bare element
+                            (or (not= :class k) (seq (class-tokens v)))
+                            ;; an EMPTY style map likewise (same probe run):
+                            ;; `div(style={})` renders a bare element, not
+                            ;; style="". Same species as the class rule —
+                            ;; a value that renders to nothing is no value
+                            (or (not= :style k) (not (map? v)) (seq v)))
                  :let  [n (name k)]]
              (if (true? v)
                (if terse? (str " " n) (str " " n "=" dq n dq))
@@ -285,7 +298,10 @@
         attrs    (when (attrs-map? (first body)) (first body))
         children (if (attrs-map? (first body)) (next body) body)
         xml?     (= :xml (:mode opts))
-        void?    (contains? void-elements tag)
+        ;; the void list is HTML knowledge; under :xml no element is void —
+        ;; `doctype xml` + `link http://google.com` renders the content
+        ;; (pug 3.0.2, probed 2026-07-22)
+        void?    (and (not xml?) (contains? void-elements tag))
         closed?  (get attrs self-close-key)
         open     (str "<" tag (render-attrs attrs sh-id sh-classes opts))
         inner    (render-children children opts)]

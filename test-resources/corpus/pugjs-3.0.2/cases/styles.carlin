@@ -1,3 +1,6 @@
+mixin div []
+  div&attributes attributes
+
 html
   head
     style.
@@ -9,8 +12,6 @@ html
     div{:style {:color "red" :background "green"}}
     div&attributes {:style "color:red;background:green"}
     div&attributes {:style {:color "red" :background "green"}}
-    mixin div []
-      div&attributes attributes
     +div{:style "color:red;background:green"}
     +div{:style {:color "red" :background "green"}}
     - (let [bg "green"])

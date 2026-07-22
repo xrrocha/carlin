@@ -144,8 +144,16 @@ p Inline text after a tag
 
 ### 3.4 Dot text blocks
 
+A `.` **alone** on its line opens a *tagless* dot block: the captured text
+splices at that position with no element wrapping it. `.foo` — a word
+character after the dot — remains the class shorthand and is never a text
+block; the disambiguator is that the dot stands alone.
+
 A tag line ending in `.` (after any attributes) begins a verbatim text block:
 every subsequent deeper-indented line is captured raw — blank lines preserved,
+including *trailing* ones (each renders as a newline; pug-faithful, probed —
+they are dropped only at EOF, where they are the file's own trailing
+whitespace and not a dedent boundary),
 relative indentation preserved by stripping the minimum indentation of the
 non-blank captured lines (more robust than pug's first-line rule).
 
@@ -1225,3 +1233,60 @@ cases whose passing was hidden. The `yield*-head` include targets moved to
 raise `:yield-outside-include`, pinned in the diagnostics suite, and their
 goldens remain in `_excluded/`, negative-by-design. No code changed —
 this revision is corpus population only.
+
+**Revision note (rev. 13).** The pools session. No new language law was
+ruled: every change below either fixes an implementation that already
+contradicted the spec, or records behavior the spec had left to inference.
+The docket (S20–S26) was ruled in batch and applied same-day; ratchet
+**83/103 → 100/102, zero regressions**, spec suites **17 tests, 96
+assertions, 0 failures**. Two cases remain red, both permanent departures
+(`inheritance.extend.include`, S8; `include-with-text`, S22).
+
+Six implementation bugs, all probe-verified against pug 3.0.2 before the fix:
+
+- **Trailing blank lines belong to the block** (§3.4, §3.10, §3.12).
+  `capture-raw` had dropped them as "the gap before the next sibling."
+  Probed: pug renders each as a newline in dot blocks, comment bodies and
+  filter input alike — and drops them only at EOF, where they are the file's
+  own trailing whitespace rather than a dedent boundary. The spec's
+  "provisional dot-block dedent rule" erratum is hereby settled in pug's
+  favor and the provisional marker removed. This single fix accounts for the
+  whole `comments` delta.
+- **`else if` with a falsy condition** (§3.7). The parser stored the
+  condition as `:else-if` and the attacher tested its *truthiness*, so
+  `else if false` — which the corpus writes verbatim — silently degraded to
+  an unconditional `else`, swallowing the real alternative. Presence is now
+  carried separately (`:else-if?`). A sentinel colliding with a legitimate
+  value: the `records-are-maps` species in a new costume, fifth sighting.
+- **Tagless lone-dot text block** (§3.3/§3.4). A `.` alone on its line opens
+  a dot block with no tag, splicing its captured text at that position.
+  Carlin had misparsed it as an empty `div` shorthand. `.foo` (word char
+  after the dot) is still the class shorthand and never reaches the branch.
+- **Literal markup lines take children** (§3.3). Deeper-indented lines under
+  a `<ul>` line are its children; pug renders them newline-joined with
+  indentation stripped. Carlin had dropped them entirely.
+- **Empty class and empty style are omitted** (§3.5/§4.6). `class=""`, `[]`,
+  `[""]` and `style={}` all render a bare element in pug. A value that
+  renders to nothing is no value.
+- **`doctype xml` reaches the serializer** (§3.9/§7.2). `compile-tree` had
+  hardcoded `:mode :html`, clobbering the doctype-selected profile back to
+  the HTML void table, so `link http://google.com` lost its children. `:mode`
+  now carries the *user's override only*, and the doctype selects the profile
+  at render as §7.2 always said it did. Under `:xml` no element is void.
+
+Two further findings, both recorded as law:
+
+- **Mixin redefinition is positional, not last-wins** (§3.13, S24). A call
+  site binds to the definition in force at its own source position. Rev. 5's
+  dedupe-last-wins was written to satisfy `letfn`'s one-binding-per-name
+  constraint and its premise was never measured; `mixin.block-tag-behaviour`
+  is the golden proof. Later same-name definitions are now suffixed and each
+  call rewritten to the name current at its position, so a definition sees
+  itself under its new name and self-recursion still binds correctly.
+- **A style map renders with trailing semicolons** (§3.5, S25). Probed:
+  `k:v;` per pair, terminator included; a style *string* passes through
+  untouched. The escaper suite had pinned the opposite — written from
+  assumption, never probed. The implementation was right and the pin was
+  corrected. **A pin is only as good as its probe**: an unprobed assertion
+  is a hypothesis wearing a test's clothes, and it will eventually contradict
+  a correct implementation with all the authority of a regression.
