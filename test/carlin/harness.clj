@@ -123,6 +123,76 @@
     (catch Throwable t
       {:id id :status :error :message (str (.getMessage t))})))
 
+;; ---------------------------------------------------------------------------
+;; S31 — the deftemplate differential
+;;
+;; `deftemplate` compiles through the HOST compiler and never calls
+;; platform/evaluate, so it is a second evaluation strategy over the same
+;; :code — and §12's matrix requirement is that every strategy produce
+;; IDENTICAL output. This is the gate that enforces it for the macro path.
+;;
+;; Why it runs here rather than as a unit suite: the differential is only
+;; meaningful over templates with real inputs, and the corpus resolver,
+;; case-model and case-filters live in this namespace. A standalone probe
+;; can compile the ~84 self-contained cases; it silently skips every
+;; include, extends and filter case — which is to say, it skips exactly the
+;; templates whose :code is most complicated. The first version of this
+;; check was such a probe, and reporting `84 identical, 0 differing` while
+;; quietly dropping 45 cases is the rev. 18 lesson in miniature: a pin is
+;; only as good as its probe.
+;;
+;; The macro cannot be called here (its argument must be a compile-time
+;; constant), so this reproduces its EMISSION: bind the borrowed
+;; vocabulary, eval the code, compare bytes against the evaluate path.
+
+(defn deftemplate-shaped-fn
+  "Build the fn exactly as `carlin.api/deftemplate` emits it: `:code`
+  wrapped in a let binding the artifact's `:vocabulary`. Kept in step with
+  the macro by construction — both read `:vocabulary` and neither derives
+  it independently."
+  [compiled]
+  (let [bindings (into [] (mapcat (fn [[s q]] [s q]))
+                       (sort-by key (:vocabulary compiled)))]
+    (eval (list 'clojure.core/let bindings (:code compiled)))))
+
+(defn run-differential
+  "Compile one case and render it BOTH ways — through platform/evaluate
+  (the :fn the artifact carries) and through the deftemplate emission.
+  Bytes must be identical. A case that cannot compile is :skip, not a
+  pass: it is reported so the denominator stays honest."
+  [{:keys [id src]}]
+  (try
+    (let [compiled (api/compile-template src {:name (str corpus-dir "/" id)
+                                              :resolver (corpus-resolver corpus-dir)
+                                              :filters case-filters})
+          via-eval (api/render compiled case-model {})
+          via-macro (api/render (assoc compiled :fn (deftemplate-shaped-fn compiled))
+                                case-model {})]
+      (if (= via-eval via-macro)
+        {:id id :status :same}
+        {:id id :status :differ :eval via-eval :macro via-macro}))
+    (catch Throwable t
+      {:id id :status :skip :message (str (.getMessage t))})))
+
+(defn differential
+  "Gate: the deftemplate path and the evaluate path agree on every corpus
+  case that compiles. Any disagreement is exit 1 — the two strategies
+  producing different bytes is precisely the drift §12 forbids."
+  [& _]
+  (let [results (mapv run-differential (golden-cases))
+        by      (group-by :status results)
+        differ  (:differ by)]
+    (println (format "\n== deftemplate differential == %d identical, %d differing, %d uncompilable"
+                     (count (:same by)) (count differ) (count (:skip by))))
+    (doseq [d (sort-by :id differ)]
+      (println "\n  DIFFER:" (:id d))
+      (println "    evaluate   :" (pr-str (:eval d)))
+      (println "    deftemplate:" (pr-str (:macro d))))
+    (if (seq differ)
+      (do (println "\ndifferential FAILED — the two evaluation strategies disagree.")
+          (System/exit 1))
+      (println "\ndifferential ok."))))
+
 (defn- load-manifest []
   (let [f (io/file manifest-file)]
     (if (.isFile f) (set (edn/read-string (slurp f))) #{})))

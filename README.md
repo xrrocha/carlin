@@ -17,6 +17,7 @@ src/carlin/codegen.cljc      the back half: checked tree -> (fn [model env] hicc
 src/carlin/runtime.cljc      spec §6/§7 runtime: escaper, raw marker, merge-attrs, ->js, render-hiccup
 test/carlin/harness.clj      golden runner + manifest ratchet + per-section report
 test/carlin/diagnostics_harness.clj  diagnostics runner: illegal templates, class+position
+test/carlin/artifact_test.cljc  §5.2 artifact contract: :symbols and :vocabulary
 test/carlin/*_test.cljc      spec-derived suites (details below)
 test-resources/corpus/       morphed pugjs 3.0.2 golden corpus (see its README.md)
 test-resources/diagnostics/  the diagnostics corpus: illegal templates (see its README.md)
@@ -32,7 +33,8 @@ test-resources/diagnostics/  the diagnostics corpus: illegal templates (see its 
 | `bb diagnostics` | **CI gate 2.** Runs the diagnostics corpus (illegal templates); any manifest case that compiles, or errs with the wrong class or position, = exit 1. |
 | `bb dbaseline` | Rewrites `diagnostics-manifest.edn` from current reality. |
 | `bb dshow <case>` | One diagnostics case: source, expectation, actual, verdict. |
-| `bb spec-tests` | The spec-derived unit suites — the contract for `carlin.runtime`, `file-resolver`, and diagnostics. Written red before the implementation; **green since S29** (22 tests, 161 assertions). |
+| `bb differential` | **CI gate 3.** Renders every golden case through BOTH evaluation strategies — `platform/evaluate` and `deftemplate`'s emission — and compares bytes; any disagreement = exit 1 (spec §12.6). |
+| `bb spec-tests` | The spec-derived unit suites — the contract for `carlin.runtime`, `file-resolver`, diagnostics, and the §5.2 artifact. Written red before the implementation; **green since S29** (25 tests, 195 assertions). |
 
 ## Comparison mode
 
@@ -64,6 +66,11 @@ when `carlin.runtime/render-hiccup` exists.
 - **resolver_test** — §5.3/§5.4 against the future `carlin.core/file-resolver`:
   contract shape, extension defaulting, `:kind`, relative/root anchoring,
   the root-jail, and `:deps` completeness via `compile-ref`.
+- **artifact_test** — §5.2: `:symbols` holds model keys and nothing else
+  (S32's gensym exclusion, with the mutation guard that a name-shape filter
+  fails), and `:vocabulary` names the ambient globals `:code` borrows (S31),
+  with the four shadowing spellings §8.2 requires keep working. Neither key
+  reaches the rendered bytes, so neither has a corpus.
 - **diagnostics_test** — §8.3/§12.4: asserts error **class**
   (`:carlin/error` keyword) and **position** (`:line`/`:col`), never message
   prose — wording may improve freely without test churn. Covers: unterminated
@@ -77,13 +84,14 @@ when `carlin.runtime/render-hiccup` exists.
 
 ## Status
 
-Three gates, all green:
+Four gates, all green:
 
 | gate | command | state |
 |---|---|---|
 | golden conformance | `bb ratchet` | **101 / 104**, zero regressions ever |
 | diagnostics corpus | `bb diagnostics` | **43 / 43** |
-| spec unit suites | `bb spec-tests` | 22 tests / 161 assertions / 0 failures |
+| deftemplate differential | `bb differential` | **101 identical, 0 differing** (3 uncompilable = the known reds) |
+| spec unit suites | `bb spec-tests` | 25 tests / 195 assertions / 0 failures |
 
 `carlin.legacy` was retired at S29 — carlin now compiles every template
 itself and **fails fast at compile time**, with positioned errors from both

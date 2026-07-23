@@ -50,6 +50,28 @@
             [carlin.platform :as platform]
             [carlin.runtime :as rt]))
 
+;; ---------------------------------------------------------------------------
+;; S32 — the minted-gensym ledger.
+;;
+;; `each-code` and `case-code` mint gensyms to bind a collection or scrutinee
+;; exactly once. Those symbols are codegen's own machinery, never model keys,
+;; but `(gensym "coll")` produces `coll1793` — no `__`, nothing to tell it
+;; apart by NAME from something an author wrote. Recording each one as it is
+;; minted lets `model-symbols` exclude it by identity, which is the only test
+;; that cannot also reject a legitimate key. See model-symbols' docstring.
+;;
+;; Bound once per compile-tree call; the atom never escapes it.
+(def ^:private ^:dynamic *minted* nil)
+
+(defn- mint!
+  "Gensym with `prefix`, recording it in the ledger so it never reaches
+  :symbols. Every gensym codegen creates for its own binding must come
+  through here — one minted elsewhere is a phantom model key again."
+  [prefix]
+  (let [g (gensym prefix)]
+    (when *minted* (swap! *minted* conj g))
+    g))
+
 (defn- fail!
   "The ONE error constructor for the back half (S29), delegating to
   carlin.cursor/fail! so a codegen error is indistinguishable from a parse
@@ -325,7 +347,7 @@
     (list 'if test then else)))
 
 (defn- each-code [ctx node]
-  (let [coll (gensym "coll")
+  (let [coll (mint! "coll")
         for-form `(for [~(:binding node) ~coll] ~(body-code ctx node))]
     (if-some [ec (:else-children node)]
       `(let [~coll ~(:coll node)]
@@ -338,7 +360,7 @@
   "Q12: bound scrutinee compared with =, bodiless whens fall through to the
   next body, no match and no default → nil."
   [ctx node]
-  (let [scrut (gensym "scrut")
+  (let [scrut (mint! "scrut")
         kids  (remove #(#{:comment :comment-silent} (:type %)) (:children node))
         _     (doseq [k kids]
                 (when-not (#{:when :default} (:type k)) (fail! ctx :case-clause k)))
@@ -552,16 +574,75 @@
   "Free simple symbols in the emitted code, minus specials, interop, known
   globals (platform/known-symbol?), the four contextual reserved words, and
   gensyms. Over-collection of template-local bindings is deliberate and
-  harmless: the local always shadows the destructured nil."
-  [form]
+  harmless: the local always shadows the destructured nil.
+
+  S32 — TWO KINDS OF GENSYM, and only one of them has a name shape.
+  Syntax-quote's auto-gensyms (`v__1468__auto__`) carry `__`, so the textual
+  filters below catch them. Codegen's OWN gensyms do not: `(gensym \"coll\")`
+  yields `coll1793`, which is indistinguishable by name from a model key an
+  author might plausibly write. They leaked into :symbols for eight corpus
+  cases — §5.2 calls :symbols `inferred model keys`, and no caller can supply
+  a name that changes on every compile.
+
+  So codegen-minted gensyms are excluded BY IDENTITY, not by name: the two
+  sites that mint them (`each-code`, `case-code`) record each one in
+  `*minted*`, and this function removes exactly those. Tightening the textual
+  filter instead — say, stripping a trailing-digits shape — would have
+  rejected legitimate model keys (`coll1`, `item2`), trading a phantom key
+  for a missing one. That is the rev. 12 species again: a name shape is a
+  sentinel, and it collides with values authors legitimately write."
+  [form minted]
   (->> (tree-seq coll? seq form)
        (filter simple-symbol?)
        (remove special-symbol?)
        (remove interop-symbol?)
-       (remove #(str/includes? (name %) "__"))               ; gensym'd
+       (remove #(str/includes? (name %) "__"))               ; syntax-quote auto-gensym
        (remove #(str/ends-with? (name %) "#"))
+       (remove minted)                                       ; S32: codegen's own
        (remove reserved)
        (remove platform/known-symbol?)
+       (distinct)))
+
+(defn- vocabulary-used
+  "The known globals this template's code actually REFERENCES — the exact
+  complement of `model-symbols` over the same candidate set.
+
+  S31 uses this to make `:code` portable. Free simple symbols in emitted
+  code are either model keys (destructured) or ambient vocabulary
+  (`count`, `str`, `raw`, …) that resolves only because `evaluate` binds
+  `*ns*` to `template-ns`. `deftemplate` has no such binding, so it binds
+  precisely these names around the code instead.
+
+  Precisely these, and no more, is the point. Binding all of clojure.core
+  would work and would be wrong: it would shadow the AUTHOR's own bindings,
+  and §8.2's standing ruling is that lexical shadowing keeps working.
+
+  OVER-COLLECTION, and why it is harmless — the same argument §4.4 makes
+  for `model-symbols`, in the other direction. This walk is scope-BLIND: it
+  does not know that `each count in xs` binds `count`, so a template that
+  shadows a core name still reports that name here. Deliberate. Teaching it
+  scope means a walker that understands `let`, `fn`, `loop`, `letfn`,
+  `doseq` and every destructuring shape — the analyzer S31 declined to
+  build, whose subtle failures are silent wrong output.
+
+  It is safe because of where the binding lands. `deftemplate` emits
+  `(let [count clojure.core/count] (fn … (for [count coll] …)))`, and the
+  author's inner binding shadows the outer one by ordinary lexical scoping:
+  the same neutralization that makes `model-symbols`' over-collection
+  harmless. Verified both directions — a shadowing template renders
+  identically through `deftemplate` and through `evaluate`. The cost is a
+  cosmetic one: `:vocabulary` may list a name the template shadows. The
+  alternative cost was an analyzer."
+  [form minted]
+  (->> (tree-seq coll? seq form)
+       (filter simple-symbol?)
+       (remove special-symbol?)
+       (remove interop-symbol?)
+       (remove #(str/includes? (name %) "__"))
+       (remove #(str/ends-with? (name %) "#"))
+       (remove minted)
+       (remove reserved)
+       (filter platform/known-symbol?)
        (distinct)))
 
 ;; ---------------------------------------------------------------------------
@@ -599,7 +680,8 @@
   commit. A diagnostics pin asserts `:nested-mixin` fires, so the guard this
   depends on cannot be removed silently."
   [tree opts cursor]
-  (let [tree    (positionalize-mixins tree)
+  (binding [*minted* (atom #{})]
+   (let [tree    (positionalize-mixins tree)
         ctx     {:cursor cursor
                  :raw-text-tags (or (:raw-text-tags opts) #{:script :style})
                  :policy (or (:on-attr-conflict opts) :error)
@@ -618,14 +700,21 @@
         doctype (some #(when (= :doctype (:type %))
                          (let [v (:value %)] (if (str/blank? v) "html" v)))
                       tree)
-        params  (vec (model-symbols body))
-        code    `(fn [{:keys ~params :as ~'model} ~'env] ~body)]
+        params  (vec (model-symbols body @*minted*))
+        code    `(fn [{:keys ~params :as ~'model} ~'env] ~body)
+        ;; S31: the ambient names this template borrows, paired with what
+        ;; they resolve to in template-ns. Data, so `deftemplate` can bind
+        ;; them without re-deriving the analysis — and so a caller spitting
+        ;; a generated namespace for AOT (§5.2) knows what to refer.
+        vocab   (into {} (keep (fn [s] (when-let [q (platform/qualify s)] [s q])))
+                      (vocabulary-used body @*minted*))]
     {:code    code
      :fn      (platform/evaluate code)
+     :vocabulary vocab
      :doctype doctype
      ;; :mode carries the USER'S override only (§7.2: ':mode overrides the
      ;; profile'); when absent the doctype selects the profile at render.
      ;; The old hardcoded :html clobbered `doctype xml` back to the HTML
      ;; void table — <link>…</link> lost its children (the xml case).
      :mode    (:mode opts)
-     :symbols (set params)}))
+     :symbols (set params)})))

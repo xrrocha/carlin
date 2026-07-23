@@ -388,3 +388,29 @@ golden file and logging the departure, never by silently matching pug.
   rejected though pug accepts it (§3.13's grammar requires the vector even
   when empty), and the whole S30 family fails at compile time where pug's
   equivalents mix compile-time and runtime failure.
+
+## S31/S32 (rev. 17) — a change this corpus could not observe, for a new reason
+
+Eight cases in this corpus — `each.else`, `code.iteration`, `case`,
+`case-blocks`, `comments-in-case`, `mixins.rest-args`, `block-code` and
+`filters-empty` — were compiling to an artifact whose `:symbols` set
+advertised model keys that do not exist: `coll1866`, `scrut2508` and the
+like, codegen's own loop and scrutinee bindings, leaked through a gensym
+filter that only recognised syntax-quote's `x__123__auto__` shape.
+
+**Zero goldens moved, and none could have.** This is the third consecutive
+session to log that sentence, but the reason is new. S29 and S30 were
+invisible here because this corpus samples only *legal* templates and those
+defects lived in the treatment of illegal ones — coverage of a space is not
+coverage of its complement. S32 is different: the input is legal, the case
+is present, and the corpus still cannot see it, because the defect never
+reaches the **output bytes**. `:symbols` describes what a caller must
+supply; a caller who supplies the wrong thing gets the same rendered
+document, since the loop's own `let` shadows the phantom binding.
+
+So the blind spot has two axes, not one. This corpus samples legal templates
+(S29, S30) *and* compares only what they render (S31, S32). The diagnostics
+corpus answers the first; `carlin.artifact-test` and the `bb differential`
+gate answer the second. Both were added because a defect walked through here
+unremarked, and the same question applies each time: not whether the corpus
+is passing, but whether the defect was ever within its reach.

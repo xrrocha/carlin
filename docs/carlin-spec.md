@@ -577,25 +577,99 @@ Sources, in order: tag shorthand (`#id`, `.class`), the attrs map, `&attributes`
 ### 5.1 Entry points
 
 ```clojure
-(carlin.core/compile-template source opts)   ; source string → compiled map
-(carlin.core/compile-ref ref opts)           ; pull root through the resolver
-(carlin.core/deftemplate name ref-or-source opts)  ; macro: compile at compile time
+(carlin.api/compile-template source opts)   ; source string → compiled map
+(carlin.api/compile-ref ref opts)           ; pull root through the resolver
+(carlin.api/deftemplate name ref-or-source opts)  ; macro: compile at compile time
 ```
 
 `deftemplate` is the cross-platform workhorse: templates compile through the
 ordinary Clojure/ClojureScript compiler at macroexpansion time — full speed, no
 interpreter, the primary CLJS mode and the natural JVM mode for static templates.
 
+Pass `:source? true` to treat the second argument as literal source rather than
+a resolver ref. `opts` is evaluated at macroexpansion — it must be, since the
+resolver has to run to read the template — so it must be a compile-time constant.
+
+**The namespace is `carlin.api` (rev. 17, S33).** Every revision through 16 said
+`carlin.core` here, and the code has never agreed: `compile-template` and
+`compile-ref` have lived in `carlin.api` since the battery was built, and S29
+kept that namespace deliberately as the front door §5 names. The spec was
+simply stale, so `deftemplate` joins its two siblings rather than being the one
+entry point in a different namespace from the other two.
+
+**Where template expressions resolve under `deftemplate` (rev. 17, S31).**
+`:code` contains unqualified symbols the *author* wrote — `count`, `str`,
+`raw` — because carlin passes user names through as user data (§8.2, rev. 4
+hygiene). Under `evaluate` they resolve because `*ns*` is bound to the template
+namespace. A macro has no such binding: it expands in the *caller's* namespace,
+where `count` means whatever that namespace decided it means. A caller who
+excludes and redefines `count` would silently render `[:p :MY-COUNT]` where the
+template says `[:p 3]` — wrong output, not an error.
+
+The vocabulary therefore travels with the artifact, as data. `:vocabulary` maps
+each borrowed ambient name to what it resolves to in the template namespace, and
+`deftemplate` binds exactly those around the emitted code:
+
+```clojure
+(let [count clojure.core/count, raw carlin.runtime/raw]
+  (fn [{:keys [...]} env] ...))
+```
+
+Same vocabulary as `evaluate` supplies through `*ns*`, established by ordinary
+lexical binding instead — which works identically on ClojureScript, where
+namespaces are a compile-time construct and `ns-resolve` does not exist.
+
+This is **not** the codegen symbol-rewriting §8.2 rejected. Nothing in `:code`
+is altered; only the binding that gives a name meaning is made explicit. That
+distinction is load-bearing, because §8.2's third clause is that *lexical
+shadowing keeps working*: authors legitimately bind core names
+(`each count in xs`, `(let [count 99] count)`, `(fn [inc] …)`), and a textual
+qualifier — having no scope tracking — would rewrite those bindings too. Making
+one safe means a scope-tracking analyzer over arbitrary author Clojure, whose
+subtle failures are silent wrong output: the disease, not the cure. Binding
+instead of rewriting preserves shadowing for free, since the author's inner
+binding shadows the outer one by ordinary scoping.
+
+Two consequences worth stating, both verified rather than assumed:
+
+- **Macros are excluded from `:vocabulary`.** A macro cannot be bound
+  (`Can't take value of a macro`), and needs no binding — it is expanded at the
+  call site before any runtime binding could matter. Templates do reach macros
+  (`when`, `cond`, `->`, and `let` in an author's code block), so this is a live
+  case.
+- **The vocabulary walk is scope-blind, deliberately.** A template that shadows
+  a core name still lists it. Harmless for the same reason §4.4's
+  over-collection is harmless — the inner binding wins — and the alternative was
+  the analyzer above.
+
 ### 5.2 The compiled artifact — a transparent value
 
 ```clojure
-{:fn       (fn [model env] hiccup)   ; ordinary function: memoize it, pass it around
- :code     '(fn [{:keys [...]} env] ...)  ; the full form, as data
- :doctype  "html" | nil
- :mode     :html | :xml
- :symbols  #{books user ...}         ; inferred model keys
- :deps     #{key ...}}               ; every resolver key touched (root, includes, extends)
+{:fn         (fn [model env] hiccup)   ; ordinary function: memoize it, pass it around
+ :code       '(fn [{:keys [...]} env] ...)  ; the full form, as data
+ :vocabulary '{count clojure.core/count}    ; ambient names :code borrows (rev. 17)
+ :doctype    "html" | nil
+ :mode       :html | :xml
+ :symbols    #{books user ...}         ; inferred model keys
+ :deps       #{key ...}}               ; every resolver key touched (root, includes, extends)
 ```
+
+`:symbols` and `:vocabulary` are complements over the same candidate symbols:
+every free simple symbol in `:code` is either a model key the caller supplies or
+an ambient name carlin supplies. Neither reaches the rendered bytes, which is
+why both are pinned by unit suites rather than by the golden corpus (§12.6).
+
+**`:symbols` holds model keys only (rev. 17, S32).** Codegen mints gensyms for
+its own bindings — the collection bound once by `each`, the scrutinee bound once
+by `case` — and through rev. 16 those leaked into `:symbols` for eight corpus
+cases. They are not model keys: no caller can supply `coll1866`, and the name
+changes on every compile. They are now excluded by *identity*, through a ledger
+recording each gensym as it is minted, rather than by name shape. The shape test
+is the tempting fix and the wrong one: `#"(coll|scrut)\d+"` also eats model keys
+an author legitimately wrote (`coll1`, `scrut2`), trading a phantom key —
+harmless, since the binding shadows it — for a missing one, which silently stops
+binding real data. Sentinel colliding with legitimate value, the rev. 12 species,
+eighth sighting.
 
 Nothing is hidden (the anti-pug4j clause): `:code`-as-data enables spitting
 generated namespaces for AOT — mechanically the same thing `deftemplate` does —
@@ -744,8 +818,22 @@ Every pass is tree → tree except the ends. Every node carries
 | `read-form-at` | edamame | edamame |
 | `evaluate` | `eval` (or sci) | `deftemplate` macro path, or sci for runtime compilation |
 | `resolve-source` | caller's resolver | resolver at macro time; preloaded map at runtime |
-| `known-symbol?` | `resolve` / sci ctx | `cljs.analyzer.api` in macro mode |
+| `known-symbol?` | `resolve` / sci ctx | resolved at macroexpansion, by `deftemplate` |
+| `qualify` | `ns-resolve` in `template-ns`, macros excluded (rev. 17) | at macroexpansion, same surface |
 | `template-ns` | dedicated namespace (clojure.core + `raw`/`->js`) | sci ctx / analyzer env exposing the same vocabulary |
+
+**`known-symbol?`'s CLJS branch is now a classified error, not `false`
+(rev. 17, S31).** It had been hardcoded `false`, which reads as a harmless
+stub and is not one: answering `false` for everything means every free
+symbol is taken for a model key, so `count` lands in the destructuring,
+binds to nil, shadows the real function, and the call dies as a bare
+`NullPointerException` with no message — the unclassified-failure signature
+§8.3 exists to abolish, on the very platform `deftemplate` serves first.
+CLJS has no runtime `ns-resolve`; resolution belongs at macroexpansion,
+where `deftemplate` runs on the JVM inside the CLJS compiler's own process
+and both `ns-resolve` and the analyzer exist. Reaching this function at CLJS
+*runtime* means the `:eval` path, which needs sci — so it now says so
+instead of returning the one specific wrong answer.
 
 `template-ns` (S15) is the namespace template expressions resolve and evaluate
 against: clojure.core plus exactly `raw` and `->js`, referred from
@@ -939,6 +1027,32 @@ a case surviving compilation alone is not yet proven rejected.
 Three classes stay deliberately uncovered, being internal-invariant
 assertions unreachable by construction: `:unsupported-construct`,
 `:extends`, and `:not-implemented` (the CLJS branches).
+
+### 12.6 The deftemplate differential (rev. 17)
+
+Item 7 of §12's plan asks that every evaluation strategy produce identical
+output. `deftemplate` is the second such strategy: it compiles through the
+host compiler and never calls `platform/evaluate`. `bb differential` renders
+every golden case both ways and compares bytes, and any disagreement is
+exit 1.
+
+It runs inside the conformance harness rather than as a unit suite, and that
+placement is the point. The differential is only meaningful over templates
+with real inputs, and the corpus resolver, `case-model` and `case-filters`
+live there. The first version of this check was a standalone probe that
+compiled whatever it could and reported *84 identical, 0 differing* — while
+silently skipping 45 cases, which is to say every include, every extends and
+every filter case: precisely the templates whose `:code` is most complicated.
+Moved into the harness it reports **101 identical, 0 differing, 3
+uncompilable**, and those three are the known golden reds, each failing with
+its correct positioned error. Same code, same verdict, honest denominator.
+*A pin is only as good as its probe* (rev. 18), a third time.
+
+The macro itself cannot be exercised here — its argument must be a
+compile-time constant — so the check reproduces its *emission*: bind the
+artifact's `:vocabulary`, evaluate `:code`, compare. Both the macro and the
+check read `:vocabulary` rather than deriving it independently, so they
+cannot drift apart (rev. 13: one scanner living in two places).
 
 ## 13. Deferred / future work
 
@@ -1595,3 +1709,67 @@ samples legal templates, and no amount of it would ever have found a
 malformed one mishandled. Coverage of a *space* is not coverage of its
 *complement*. When a test artifact is green through a defect, the question
 is not whether it is passing but whether the defect was ever in its reach.
+
+**Revision note (rev. 17).** `deftemplate` lands — the last unimplemented §5
+entry point — with two corrections it forced and one gate it justified.
+
+**S33** moves §5.1's stated namespace from `carlin.core` to `carlin.api`. The
+spec had said `core` since rev. 1 and the code has never agreed: both siblings
+have lived in `api` since the battery was built, and S29 kept that namespace
+deliberately as the front door §5 names. Stale prose, corrected rather than
+implemented around.
+
+**S31** began as a ruling to qualify author symbols at codegen time, and was
+withdrawn before implementation because §8.2 had already rejected exactly that,
+twice and by name — *ambient vocabulary belongs to namespace mechanics, user
+names stay user data, lexical shadowing keeps working*. The third clause is
+what kills it. Authors legitimately bind core names — `each count in xs`,
+`(let [count 99] count)`, `(let [{:keys [str]} …] str)`, `((fn [inc] …) 41)`,
+all of which render correctly today — and a textual qualifier has no scope
+tracking, so it rewrites those bindings too. Making one safe means a
+scope-tracking analyzer over arbitrary author Clojure, whose subtle failures are
+silent wrong output: the disease presented as the cure. *Check a ruling's
+factual premises before enforcing it* (rev. 11), this time against a ruling of
+our own making rather than an inherited one.
+
+What shipped instead carries the vocabulary as **data**. The artifact gains
+`:vocabulary`, mapping each borrowed ambient name to its resolution in
+`template-ns`, and `deftemplate` binds precisely those around `:code`. Nothing
+is rewritten, so shadowing survives by ordinary lexical scoping. The decisive
+test: a template reading `p= (count coll)`, expanded inside a namespace that
+excludes and redefines `count`, renders `<p>3</p>` — where the naive macro
+rendered `[:p :MY-COUNT]`, wrong output rather than an error, from a
+declaration made in another file for unrelated reasons.
+
+The route there was not the one planned. Emitting into a generated namespace
+via runtime `in-ns` — the mechanism §5.2 names for AOT — is **unusable under
+babashka's sci**: a var defined that way is unreachable through `resolve`,
+`ns-resolve`, `requiring-resolve` and direct symbol reference alike, all four
+answering nil. bb is a declared target platform, so the namespace had to become
+a `let`. *A handoff's plan item is a hypothesis about the code* (rev. 19), and
+so is a ruling's stated mechanism.
+
+**S32** removes codegen's own gensyms from `:symbols`, which §5.2 defines as
+inferred model keys. `(gensym "coll")` yields `coll1793` — no `__`, so the
+existing filter (which catches syntax-quote's `x__123__auto__`) never saw it,
+and eight corpus cases advertised a model key no caller could supply and that
+changed on every compile. Excluded now by identity, through a minting ledger,
+not by name shape: `#"(coll|scrut)\d+"` passes every obvious assertion and
+quietly eats `coll1` and `scrut2` from a caller's real model, trading a phantom
+key for a missing one. Mutation-tested — the shape filter passes the golden
+ratchet and fails the new pin. Eighth sighting of the rev. 12 species.
+
+Neither `:symbols` nor `:vocabulary` reaches the rendered bytes, so the golden
+corpus was green through S32 and would be green through a `:vocabulary` naming
+nothing at all. §12.6 adds the differential gate for the second defence, and
+`carlin.artifact-test` for the first. Both ratchets held at 101/104 and 43/43
+with zero flips; suites 22/161 → 25/195.
+
+**New lesson: a contract key that never reaches the output has no corpus.**
+The golden corpus samples rendered documents, so it can only ever police what
+renders. `:symbols`, `:vocabulary`, `:deps` and `:code` are load-bearing parts
+of §5.2's promise that nothing is hidden, and every one of them is invisible to
+the instrument that guards everything else. Rev. 22 observed that a corpus
+cannot find defects outside the population it samples; this is the same
+observation along the other axis — not illegal input this time, but legal input
+whose defect never shows up in the bytes.

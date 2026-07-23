@@ -6,6 +6,9 @@
   baseline   {:doc "Rewrite conformance-manifest.edn from current reality"
               :requires ([carlin.harness :as h])
               :task (h/baseline)}
+  differential {:doc "deftemplate path vs evaluate path — bytes must agree (S31)"
+              :requires ([carlin.harness :as h])
+              :task (h/differential)}
   diagnostics {:doc "Run the DIAGNOSTICS corpus (illegal templates; class+position)"
               :requires ([carlin.diagnostics-harness :as dh])
               :task (dh/ratchet)}
@@ -22,9 +25,9 @@
               :requires ([clojure.test :as t]
                          [carlin.escaper-test] [carlin.merge-attrs-test]
                          [carlin.to-js-test] [carlin.resolver-test]
-                         [carlin.diagnostics-test])
+                         [carlin.diagnostics-test] [carlin.artifact-test])
               :task (do (t/run-tests 'carlin.escaper-test 'carlin.merge-attrs-test
                                      'carlin.to-js-test 'carlin.resolver-test
-                                     'carlin.diagnostics-test)
+                                     'carlin.diagnostics-test 'carlin.artifact-test)
                         (println "\n(spec suites are informational until the implementation lands;"
                                  "the CI gate is `bb ratchet`)"))}}}

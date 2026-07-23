@@ -115,12 +115,80 @@
   [resolver from ref]
   (when resolver (resolver from ref)))
 
+(def template-vocabulary
+  "The vocabulary template expressions resolve against (S15), as DATA:
+  clojure.core, plus exactly these names from carlin.runtime.
+
+  One fact, read from two places. `template-ns` above refers these at
+  runtime for the `evaluate` path; `carlin.api/deftemplate` (S31) emits an
+  `ns` form declaring the same ones for the macro path. Stating it once is
+  the point — S15's guarantee is that analysis and evaluation agree *by
+  construction*, and two hand-maintained lists of the same two symbols is
+  precisely the drift the rev. 13 lesson warns about (one scanner living in
+  two places). Add a name to carlin's ambient vocabulary here, or the two
+  paths silently disagree about what a template may say."
+  '[raw ->js])
+
+(defn qualify
+  "The namespace-qualified symbol `sym` resolves to in the template namespace,
+  or nil if it resolves to nothing there.
+
+  S31's portability seam. `deftemplate` cannot bind `*ns*` around the code it
+  emits, so it binds the template's borrowed vocabulary explicitly —
+  `(let [count clojure.core/count, raw carlin.runtime/raw] …)` — and needs
+  the right-hand side of each pair. Resolution happens HERE, against
+  `template-ns`, so the macro path and the `evaluate` path answer from the
+  same surface: S15's agree-by-construction guarantee, extended to a second
+  consumer rather than reimplemented beside it.
+
+  This is a lookup, NOT the codegen symbol-rewriting §8.2 rejected: nothing
+  in `:code` is altered. The author's `count` stays the symbol `count`; only
+  the binding that gives it meaning is made explicit at the point of use.
+
+  MACROS ANSWER nil, deliberately. A macro cannot be `let`-bound — binding
+  one is `Can't take value of a macro`, a hard compile failure — and it does
+  not need to be: a macro in operator position is expanded by the compiler
+  at the call site, before any runtime binding could matter. Templates do
+  reach macros (`when`, `cond`, `->`, and `let` itself in an author's code
+  block), so this is a live case, not a hypothetical. They are excluded here
+  rather than at the call site so that every consumer of `qualify` inherits
+  the exclusion instead of rediscovering it — the rev. 13 lesson, applied
+  before rather than after."
+  [sym]
+  #?(:clj  (when-let [v (ns-resolve template-ns sym)]
+             (when (and (var? v) (not (:macro (meta v))))
+               (symbol (str (ns-name (:ns (meta v)))) (str (:name (meta v))))))
+     :cljs nil))
+
 (defn known-symbol?
   "Is `sym` a known global (not a model key)? Free-symbol analysis (spec §2)
   consults this; unresolvable symbols are destructured from the model.
   Resolution happens in the template namespace (S15), the same surface
   evaluate uses — so `raw` and `->js` are known, and the answer no longer
-  depends on the caller's ambient *ns*."
+  depends on the caller's ambient *ns*.
+
+  S31 — THE CLJS BRANCH IS NOT A STUB ANY MORE, and the old `false` was
+  actively dangerous rather than merely incomplete. Answering `false` for
+  everything means every free symbol is taken for a model key, so `count`
+  lands in the `{:keys [...]}` destructuring, binds to nil, shadows the real
+  function, and the call dies as a bare NullPointerException with no message
+  — the unclassified-failure signature §8.3 exists to abolish, on the very
+  platform `deftemplate` is meant to serve first.
+
+  CLJS has no runtime `ns-resolve`. Resolution there belongs at
+  MACROEXPANSION, against the vocabulary the emitted `ns` form declares —
+  which means it belongs to `deftemplate` (running on the JVM, in the CLJS
+  compiler's own process, where `ns-resolve` and the analyzer both exist),
+  not to a runtime call in the browser. So the CLJS branch of *this*
+  function is now a classified error rather than a silent `false`: reaching
+  it means someone is doing free-symbol analysis at CLJS runtime, which is
+  the `:eval` path, and that path needs sci (still open) rather than a
+  wrong answer.
+
+  Not left as `false` with a TODO: `false` is not neutral here, it is the
+  specific wrong answer that turns `count` into a nil-bound model key. An
+  error says so; `false` renders confidently broken output."
   [sym]
   #?(:clj  (some? (ns-resolve template-ns sym))
-     :cljs false))
+     :cljs (throw (ex-info "known-symbol?: CLJS runtime analysis needs the sci :eval strategy; the deftemplate path resolves at macroexpansion instead"
+                           {:carlin/error :not-implemented :symbol sym}))))
