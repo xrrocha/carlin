@@ -1,0 +1,3 @@
+ul
+  each b in
+    li hi

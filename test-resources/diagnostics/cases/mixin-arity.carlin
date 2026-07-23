@@ -1,0 +1,3 @@
+mixin m [a b]
+  p x
++(m 1)

@@ -6,6 +6,15 @@
   baseline   {:doc "Rewrite conformance-manifest.edn from current reality"
               :requires ([carlin.harness :as h])
               :task (h/baseline)}
+  diagnostics {:doc "Run the DIAGNOSTICS corpus (illegal templates; class+position)"
+              :requires ([carlin.diagnostics-harness :as dh])
+              :task (dh/ratchet)}
+  dbaseline  {:doc "Rewrite diagnostics-manifest.edn from current reality"
+              :requires ([carlin.diagnostics-harness :as dh])
+              :task (dh/baseline)}
+  dshow      {:doc "Show one diagnostics case: bb dshow <case>"
+              :requires ([carlin.diagnostics-harness :as dh])
+              :task (dh/show (first *command-line-args*))}
   show       {:doc "Show one case's diff: bb show <case>.carlin"
               :requires ([carlin.harness :as h])
               :task (h/show (first *command-line-args*))}

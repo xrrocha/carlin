@@ -1,0 +1,3 @@
+ul
+  each b xs
+    li= b

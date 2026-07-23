@@ -179,3 +179,135 @@
     (is (classed? (err "div\n  mixin inner []\n    p x") :nested-mixin)))
   (testing "which is what makes codegen's top-level-only mixin table sound"
     (is (classed? (err "div\n  mixin inner []\n    p x\n+(inner)") :nested-mixin))))
+
+(deftest malformed-directive-heads
+  "S30 — a directive head whose operand is MISSING. Before S30 these did not
+   error: every one read as nil, and nil is a legal Clojure form, so codegen
+   compiled it faithfully into well-formed, silently wrong output —
+   `each b xs` (no `in`) became (let [coll nil] (for [b coll] ...)) and
+   rendered an EMPTY loop; a bare `if` became a dead `(if nil ...)`; a bare
+   `case` matched only `when nil`. Two spellings were worse than silent:
+   `mixin` with no name reached codegen and died as a raw Clojure
+   'Unsupported binding form' carrying no position at all.
+
+   This is the S29 species one position over — a template that should be
+   rejected turned into confident wrong output — and the golden corpus is
+   structurally blind to it, holding only legal templates. pug 3.0.2 errors
+   on every spelling below (PUG:MALFORMED_EACH, PUG:SYNTAX_ERROR,
+   PUG:NO_CASE_EXPRESSION), probed directly.
+
+   Offenders sit on line 2+ wherever the grammar allows, so a class that
+   merely defaulted to line 1 could not pass."
+  (testing "each/for — the four operand positions, each named separately"
+    (is (classed? (err "ul\n  each b xs\n    li= b") :each-expected-in))
+    (is (classed? (err "ul\n  each b\n    li hi") :each-missing-in))
+    (is (classed? (err "ul\n  each\n    li hi") :each-missing-binding))
+    (is (classed? (err "ul\n  each b on xs\n    li= b") :each-expected-in))
+    (testing "and `for`, the alias, is the same grammar — a lesson learned in
+              one position recurs one position over (rev. 13)"
+      (is (classed? (err "ul\n  for b xs\n    li= b") :each-expected-in))))
+  (testing "the `in` diagnostics point at where `in` SHOULD BE, not at the
+            directive — the binding has already been read, so its end column
+            is the informative position"
+    (let [d (err "ul\n  each b xs\n    li= b")]
+      (is (= 2 (:line d)))
+      (is (= 9 (:col d))))
+    (testing "and the wrong keyword is reported as found, for the message"
+      (is (= 'on (:found (err "ul\n  each b on xs\n    li= b"))))))
+  (testing "if/unless/case — a missing operand"
+    (is (classed? (err "div\n  if\n    p hi") :missing-condition))
+    (is (classed? (err "div\n  unless\n    p hi") :missing-condition))
+    (is (classed? (err "div\n  case\n    when 1\n      p hi") :missing-scrutinee)))
+  (testing "`else if` with no condition — :else-if? already carried presence
+            of the KEYWORD separately from the form (rev. 13); this adds
+            presence of the CONDITION on the same principle"
+    (is (classed? (err "div\n  if false\n    p a\n  else if\n    p b")
+                  :missing-condition)))
+  (testing "a `when` clause with no value"
+    (is (classed? (err "div\n  case 1\n    when\n      p hi") :missing-when-value)))
+  (testing "buffered code and interpolation with no expression. These were
+            not silent either — they were the WORST diagnostic in the
+            codebase: a bare NullPointerException with a nil message, no
+            class, no line and no column, because read-source-form answers
+            {:eof true} with no :end-line and the caller `inc`ed it."
+    (is (classed? (err "div\n  p=") :missing-expression))
+    (is (classed? (err "div\n  p!=") :missing-expression))
+    (testing "and empty #{} / !{} interpolation, which could not even reach
+              that path: handed a lone `}` the reader THROWS 'Unmatched
+              delimiter' rather than answering :eof, and edamame reports
+              that with an opened-delimiter-loc whose row and col are NIL —
+              so carlin.platform/rebase `dec`ed nil one layer deeper still.
+              Detected before the read, since the reader cannot express it."
+      (is (classed? (err "div\n  p #{}") :missing-expression))
+      (is (classed? (err "div\n  p !{}") :missing-expression))))
+  (testing "mixin definition heads — name and bindings vector both required
+            (§3.13 grammar: `mixin name [binding-vector]`). These two were
+            not silent but UNCLASSIFIED: no class, no line, no column."
+    (is (classed? (err "p a\nmixin\n  p hi") :mixin-missing-name))
+    (is (classed? (err "p a\nmixin \"str\" []\n  p hi") :mixin-bad-name))
+    (is (classed? (err "p a\nmixin m\n  p hi") :mixin-missing-bindings))
+    (is (classed? (err "p a\nmixin m {}\n  p hi") :mixin-bad-bindings))))
+
+(deftest falsy-operands-stay-legal
+  "S30's converse, and the discipline that makes it safe: ABSENCE is not
+   FALSITY. Every check above tests the presence of the READ (a map from
+   read-line-form), never the truthiness of the form it carries — because
+   nil and false are perfectly legal operands a template may write
+   deliberately, and they arrive carrying the identical :form nil.
+
+   This is the rev. 13 else-if-falsy lesson applied across a whole family:
+   `else if false` is a legal condition whose form is falsy, so truthiness
+   could never mean presence. Had S30 tested the form instead of the read,
+   every template below would now be rejected — which is the failure mode
+   that matters (rejecting the legal), and the one these pins exist to catch."
+  (testing "each over a falsy or empty collection"
+    (is (nil? (err "ul\n  each b in nil\n    li= b")))
+    (is (nil? (err "ul\n  each b in []\n    li= b"))))
+  (testing "destructuring bindings still read as one form"
+    (is (nil? (err "ul\n  each [i x] in (map-indexed vector xs)\n    li= x"))))
+  (testing "falsy conditions and scrutinees"
+    (is (nil? (err "div\n  if nil\n    p hi")))
+    (is (nil? (err "div\n  if false\n    p hi")))
+    (is (nil? (err "div\n  unless nil\n    p hi")))
+    (is (nil? (err "div\n  case nil\n    when nil\n      p hi"))))
+  (testing "`when nil` and `when false` — the clauses that spell a falsy
+            scrutinee value deliberately"
+    (is (nil? (err "div\n  case nil\n    when nil\n      p matched")))
+    (is (nil? (err "div\n  case false\n    when false\n      p matched"))))
+  (testing "`else if nil` — the exact rev. 13 case"
+    (is (nil? (err "div\n  if false\n    p a\n  else if nil\n    p b"))))
+  (testing "`when value: head` expansion still parses (the colon defeats a
+            naive read, so absence is detected AFTER the retry, not before)"
+    (is (nil? (err "div\n  case 1\n    when 1: p hi"))))
+  (testing "mixin definitions with an empty, fixed, or variadic vector"
+    (is (nil? (err "mixin m []\n  p hi\n+(m)")))
+    (is (nil? (err "mixin m [a b]\n  p= a\n+(m 1 2)")))
+    (is (nil? (err "mixin m [a & r]\n  p= a\n+(m 1 2)"))))
+  (testing "buffered expressions that are merely falsy — `p= nil` renders
+            empty and is legal; only the ABSENT expression is an error"
+    (is (nil? (err "div\n  p= nil")))
+    (is (nil? (err "div\n  p!= nil")))
+    (is (nil? (err "div\n  p #{nil}"))))
+  (testing "an empty `-` code line stays legal (pug accepts it too) — the
+            one spelling in this family carlin does NOT reject"
+    (is (nil? (err "div\n  -"))))
+  (testing "an ESCAPED \\#{} is literal text, not an empty interpolation"
+    (is (nil? (err "div\n  p \\#{}"))))
+  (testing "an unmatched CLOSER in a restrictive-four position — the input
+            that actually reaches the platform hole. `#{}` never gets there
+            (codegen intercepts it before the read), so THIS is the probe
+            that pins carlin.platform's nil-row guard: without it edamame
+            reports an opened-delimiter-loc carrying nil :row, rebase decs
+            nil, and the compile dies as a bare NullPointerException.
+            A pin is only as good as its probe (rev. 18)."
+    (is (classed? (err "div\n  p= }") :reader-error))
+    (is (classed? (err "div\n  p= )") :reader-error))
+    (is (classed? (err "div\n  - }") :reader-error)))
+  (testing "a genuinely unterminated form still classifies as
+            :unterminated-form — the platform guard narrowed that branch to
+            locations that actually know where they opened, and must not
+            have swallowed the real case"
+    (is (classed? (err "a{:href \"x\"") :unterminated-form)))
+  (testing "a bare `doctype` remains legal and defaults to html — the one
+            spelling in this family where carlin and pug already agreed"
+    (is (nil? (err "doctype\np hi")))))

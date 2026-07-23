@@ -363,3 +363,28 @@ golden file and logging the departure, never by silently matching pug.
   for the new classes and their positions, three asserting legal templates
   still compile, and two pinning the `:nested-mixin` guard that codegen's
   top-level-only mixin table silently depends on.
+
+- **S30 — malformed directive heads; a behavior change this corpus could not
+  observe** (2026-07-22, rev. 16). Sixteen spellings across seven constructs
+  became positioned compile errors: `each`/`for` heads missing `in`, a
+  binding, or a collection; `if`/`unless`/`else if` with no condition; `case`
+  with no scrutinee; `when` with no value; `=`, `!=`, `#{}`, `!{}` with no
+  expression; and `mixin` definition heads missing a name or bindings vector.
+
+  **Zero cases here moved, and none could have.** Every template in this
+  corpus is legal by construction — it is a *conformance* corpus, morphed
+  from pug's own passing cases — so it holds no instance of any spelling S30
+  rejects. The ratchet stayed at 101/104 through the entire change, exactly
+  as it did through S29, and for the identical reason: a corpus of legal
+  templates cannot observe what a compiler does with illegal ones.
+
+  That is now twice. The response was to build the **diagnostics corpus**
+  (`test-resources/diagnostics/`, spec §12.5) as the standing instrument for
+  this territory, rather than continuing to find these one probe at a time.
+  It had been specified since spec rev. 1 and never constructed.
+
+  Two departures by strictness are recorded there rather than here, since
+  neither has a case in this corpus: `mixin m` without a bindings vector is
+  rejected though pug accepts it (§3.13's grammar requires the vector even
+  when empty), and the whole S30 family fails at compile time where pug's
+  equivalents mix compile-time and runtime failure.

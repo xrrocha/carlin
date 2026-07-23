@@ -211,13 +211,26 @@
         (let [cap (capture-raw cursor node-indent (inc line))]
           (assoc a :dot-block cap :next-line (:next-line cap)))
 
-        ;; buffered content tails — restrictive-four: may span lines
+        ;; buffered content tails — restrictive-four: may span lines.
+        ;; S30 — the expression is REQUIRED. `read-source-form` signals
+        ;; nothing-to-read as {:eof true}, with no :end-line, so a bare `p=`
+        ;; used to reach `(inc nil)` and crash with a bare
+        ;; NullPointerException: no class, no message, no position — the
+        ;; worst diagnostic in the codebase. pug raises PUG:UNEXPECTED_TEXT.
+        ;; Note this tests :eof, not the form: `p= nil` is a legal buffered
+        ;; expression rendering nothing, and must stay legal.
         (str/starts-with? rem "!=")
-        (let [{:keys [form end-line]} (read-source-form cursor line (+ col 2))]
+        (let [{:keys [form end-line eof]} (read-source-form cursor line (+ col 2))]
+          (when eof
+            (cur/fail! cursor :missing-expression {:line line :col (+ col 2)}
+                       {:sigil "!="}))
           (assoc a :buffered {:form form :raw? true} :next-line (inc end-line)))
 
         (str/starts-with? rem "=")
-        (let [{:keys [form end-line]} (read-source-form cursor line (inc col))]
+        (let [{:keys [form end-line eof]} (read-source-form cursor line (inc col))]
+          (when eof
+            (cur/fail! cursor :missing-expression {:line line :col (inc col)}
+                       {:sigil "="}))
           (assoc a :buffered {:form form :raw? false} :next-line (inc end-line)))
 
         ;; block expansion `a: img` — the rest of the line is a nested head
@@ -308,7 +321,12 @@
           (merge {:form (:form r) :next-line (inc line)}
                  (when r
                    (maybe-expansion cursor line (+ col (count v)) node-indent))))
-        {:form nil :next-line (inc line)}))))
+        ;; S30 — nothing readable and no `value: head` expansion either:
+        ;; the clause has NO scrutinee value. :absent? reports that as a
+        ;; fact about the SOURCE, because :form nil cannot: `when nil` is a
+        ;; legal clause matching a nil scrutinee, and it arrives here with
+        ;; the identical :form. Same absence-vs-falsy discipline as rev. 13.
+        {:form nil :absent? true :next-line (inc line)}))))
 
 (defn- classify-line
   "Classify the head at (line, col) and consume its logical extent.
@@ -492,17 +510,47 @@
                :consumed (next+ (inc line))})
 
             "mixin"
+            ;; S30 — the name and the bindings vector are both REQUIRED
+            ;; (§3.13: definitions take an explicit vector even when empty).
+            ;; Before S30 a missing or non-symbol name produced :name nil,
+            ;; which reached codegen and died as a bare Clojure
+            ;; "Unsupported binding form" carrying NO position — an
+            ;; unclassified crash rather than a diagnostic. A non-vector
+            ;; bindings form was worse: `mixin m {}` compiled and rendered
+            ;; nothing at all.
             (let [nm (read-line-form cursor line (arg-col))
-                  bv (when (and nm (symbol? (:form nm)))
-                       (read-line-form cursor line (:end-col nm)))]
+                  _  (when-not nm
+                       (cur/fail! cursor :mixin-missing-name pos))
+                  _  (when-not (symbol? (:form nm))
+                       (cur/fail! cursor :mixin-bad-name pos {:found (:form nm)}))
+                  bv (read-line-form cursor line (:end-col nm))
+                  _  (when-not bv
+                       (cur/fail! cursor :mixin-missing-bindings
+                                  {:line line :col (:end-col nm)}
+                                  {:mixin (:form nm)}))
+                  _  (when-not (vector? (:form bv))
+                       (cur/fail! cursor :mixin-bad-bindings
+                                  {:line line :col (:end-col nm)}
+                                  {:mixin (:form nm) :found (:form bv)}))]
               {:node (node :mixin-def
-                           :name (when (symbol? (:form nm)) (:form nm))
+                           :name (:form nm)
                            :bindings (:form bv)
-                           :arity (some-> bv :form mixin-arity))
+                           :arity (mixin-arity (:form bv)))
                :consumed (next+ (inc line))})
 
             ("if" "unless" "case")
+            ;; S30 — the operand is REQUIRED. Presence is the map, not the
+            ;; form: `if nil` and `case nil` are legal (a condition that is
+            ;; always false; a scrutinee no `when` will match), so this
+            ;; tests `r`, never `(:form r)`. Before S30 a bare `if` read as
+            ;; nil and compiled to `(if nil ...)` — a silently dead branch;
+            ;; a bare `case` to `(let [scrut nil] ...)`, matching only
+            ;; `when nil`. pug raises PUG:SYNTAX_ERROR and
+            ;; PUG:NO_CASE_EXPRESSION respectively.
             (let [r (read-line-form cursor line (arg-col))]
+              (when-not r
+                (cur/fail! cursor (if (= "case" kw) :missing-scrutinee :missing-condition)
+                           pos {:directive (symbol kw)}))
               {:node (node (keyword kw) :form (:form r))
                :consumed (next+ (inc line))})
 
@@ -515,21 +563,65 @@
                 ;; so truthiness of the form cannot mean "this is an
                 ;; else-if" (else-if-falsy bug, rev. 13)
                 (let [r (read-line-form cursor line (+ (arg-col) 2))]
+                  ;; S30 — `else if` with no condition is the same absence
+                  ;; hole. :else-if? already carries presence-of-the-KEYWORD
+                  ;; separately from the form for the rev. 13 reason; this
+                  ;; adds presence-of-the-CONDITION, on the same principle:
+                  ;; `else if nil` stays legal, `else if` alone does not.
+                  (when-not r
+                    (cur/fail! cursor :missing-condition
+                               {:line line :col (+ (arg-col) 2)}
+                               {:directive 'else-if}))
                   {:node (node :else :else-if? true :else-if (:form r))
                    :consumed (next+ (inc line))})
                 {:node (node :else) :consumed (next+ (inc line))}))
 
             ("each" "for")
+            ;; S30 — every operand is REQUIRED, and absence is a positioned
+            ;; error rather than a nil that compiles. `read-line-form`
+            ;; returns nil for ABSENCE and a map for PRESENCE, so these
+            ;; tests never consult the form's truthiness: `each x in nil`
+            ;; is a legal loop over nothing and must stay legal (the rev. 13
+            ;; else-if-falsy discipline, applied one directive over).
+            ;;
+            ;; Before S30 all three reads degraded to nil through `when`,
+            ;; and nil is a legal Clojure form — so `each b xs` compiled to
+            ;; (let [coll nil] (for [b coll] ...)) and rendered an EMPTY
+            ;; loop. Well-formed, silent, wrong: the S29 species one
+            ;; position over, invisible to a corpus that holds only legal
+            ;; templates. pug 3.0.2 raises PUG:MALFORMED_EACH on each of
+            ;; these spellings; carlin now errs at the same four points,
+            ;; naming which operand is missing (§8.3).
             (let [binding (read-line-form cursor line (arg-col))
-                  in-form (when binding (read-line-form cursor line (:end-col binding)))
-                  coll    (when (and in-form (= 'in (:form in-form)))
-                            (read-line-form cursor line (:end-col in-form)))]
+                  _       (when-not binding
+                            (cur/fail! cursor :each-missing-binding pos
+                                       {:directive (symbol kw)}))
+                  in-form (read-line-form cursor line (:end-col binding))
+                  _       (when-not in-form
+                            (cur/fail! cursor :each-missing-in
+                                       {:line line :col (:end-col binding)}
+                                       {:directive (symbol kw)}))
+                  _       (when-not (= 'in (:form in-form))
+                            (cur/fail! cursor :each-expected-in
+                                       {:line line :col (:end-col binding)}
+                                       {:directive (symbol kw)
+                                        :found (:form in-form)}))
+                  coll    (read-line-form cursor line (:end-col in-form))
+                  _       (when-not coll
+                            (cur/fail! cursor :each-missing-coll
+                                       {:line line :col (:end-col in-form)}
+                                       {:directive (symbol kw)}))]
               {:node (node :each :binding (:form binding) :coll (:form coll))
                :consumed (next+ (inc line))})
 
             "when"
-            (let [{:keys [form expanded next-line]}
+            (let [{:keys [form expanded next-line absent?]}
                   (parse-when-head cursor line (arg-col) indent)]
+              ;; S30 — a `when` with no value silently became `(= scrut nil)`,
+              ;; a clause matching only a nil scrutinee. `when nil` spells
+              ;; that deliberately and stays legal; the bare keyword does not.
+              (when absent?
+                (cur/fail! cursor :missing-when-value pos {:directive 'when}))
               {:node (node :when :form form :expanded expanded)
                :consumed (next+ next-line)})
 

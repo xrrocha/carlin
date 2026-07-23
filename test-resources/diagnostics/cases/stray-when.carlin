@@ -1,0 +1,3 @@
+p a
+when 1
+  p hi

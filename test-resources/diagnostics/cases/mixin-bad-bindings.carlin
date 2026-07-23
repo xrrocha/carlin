@@ -1,0 +1,3 @@
+p a
+mixin m {}
+  p hi

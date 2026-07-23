@@ -111,7 +111,21 @@
                   (recur (subs after (inc j))
                          (conj pieces {:node (core/parse-inline-fragment
                                               (subs after 0 j))})))
-                (let [r    (platform/read-form-at after 1 1)
+                (let [;; S30 — an EMPTY interpolation (`#{}` / `!{}`) has no
+                      ;; form between the braces. Detected BEFORE the read,
+                      ;; because the reader cannot express this: handed `}`
+                      ;; it throws "Unmatched delimiter" rather than
+                      ;; answering :eof, which used to surface as a bare
+                      ;; NullPointerException (no class, message or
+                      ;; position) and now, with the platform guard, as a
+                      ;; generic :reader-error. Neither says what is
+                      ;; actually wrong. pug raises PUG:SYNTAX_ERROR.
+                      _    (when (re-find #"^\s*\}" after)
+                             (throw (ex-info "empty interpolation"
+                                             (merge {:carlin/error :missing-expression
+                                                     :sigil (str (first tok) "{")}
+                                                    pos))))
+                      r    (platform/read-form-at after 1 1)
                       n    (consumed-chars after r)
                       rest* (str/replace-first (subs after n) #"^\s*\}" "")]
                   (recur rest* (conj pieces {kind (:form r)})))))))))))

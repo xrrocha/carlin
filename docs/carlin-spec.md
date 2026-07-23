@@ -793,6 +793,27 @@ user errors, reported positioned so that the day they fire they say where:
 folded) and `:unsupported-construct` (a node type reaching `gen` with no
 branch).
 
+**Malformed directive heads (rev. 16, S30).** A directive whose operand is
+MISSING is a positioned error, not a nil that compiles. The classes are
+`:each-missing-binding`, `:each-missing-in`, `:each-expected-in` (carrying
+`:found`) and `:each-missing-coll` for the `each`/`for` family;
+`:missing-condition` for `if`, `unless` and `else if`; `:missing-scrutinee`
+for `case`; `:missing-when-value` for a `when` clause; `:missing-expression`
+for an empty `=`, `!=`, `#{}` or `!{}`; and `:mixin-missing-name`,
+`:mixin-bad-name`, `:mixin-missing-bindings`, `:mixin-bad-bindings` for
+definition heads.
+
+The discipline these share, and it is the load-bearing one: **absence is
+tested, never falsity.** `if nil`, `when false`, `each x in nil` and `p= nil`
+are all legal templates, and they reach the parser carrying the identical
+`:form nil` that a missing operand does. Presence is therefore read from the
+READ — the map `read-line-form` returns, or `read-source-form`'s `:eof`
+flag — never from the truthiness of the form it carries. This is the rev. 13
+else-if-falsy lesson generalized across a family: `:else-if?` already
+carried presence-of-the-keyword separately from the form for exactly this
+reason. A check written the other way rejects legal templates, which is the
+failure mode that matters and the one `falsy-operands-stay-legal` pins.
+
 This replaced the **deferral contract**, under which the back half threw an
 unpositioned `:carlin/defer` sentinel and the seam silently recompiled the
 whole template on the retired `carlin.legacy` engine. See the rev. 15
@@ -871,8 +892,8 @@ pinning the decided behavior. Structure:
    serializer and hiccup2; diff. Hiccup goes from dependency to free reference
    implementation. Documented-divergence list excepted (boolean attrs style,
    raw-in-attrs).
-4. **Diagnostics corpus** — one deliberately broken template per positioned
-   error class in §8.3, asserting `{:key :line :col}` and message shape. Error
+4. **Diagnostics corpus** (§12.5) — one deliberately broken template per
+   positioned error class in §8.3, asserting class and `{:line :col}`. Error
    quality is a feature; test it like one.
 5. **Cross-platform matrix** — the golden corpus under: JVM `eval`, JVM
    `deftemplate`, bb, CLJS `deftemplate`, sci. Output must be identical;
@@ -880,6 +901,44 @@ pinning the decided behavior. Structure:
 6. **Resolver tests** — file-resolver anchoring, extension defaulting, root-jail
    escapes, `:kind` routing, cycle detection, `:deps` completeness; the
    three-line in-memory resolver doubles as the test harness for include/extends.
+
+### 12.5 The diagnostics corpus (rev. 16)
+
+Built at S30, having been specified since rev. 1 as item 4 above and never
+constructed — a gap that cost two sessions of defects (§8.3's S29 and S30
+classes) before it was closed.
+
+It lives at `test-resources/diagnostics/`, runs under `bb diagnostics`, and
+carries **its own manifest ratchet** (`diagnostics-manifest.edn`),
+independent of the golden one. Its necessity is structural, not incidental:
+the golden corpus holds only LEGAL templates and compares OUTPUT BYTES, so a
+template that ought to be *rejected* has no golden to disagree with. It is
+constitutionally incapable of observing what carlin does with malformed
+source, and was green through both S29 and S30.
+
+Every axis inverts:
+
+| golden corpus | diagnostics corpus |
+|---|---|
+| legal templates | illegal templates |
+| compares output bytes | compares error class + position |
+| green = correct rendering | green = correct rejection |
+| a case that errors is a bug | a case that compiles is a bug |
+
+`<name>.carlin` pairs with `<name>.edn` holding `{:class :line :col}`, plus
+optional `:data` (ex-data keys that must match), `:fixture` (a named
+resolver, since a template cannot express one) and `:entry :compile-ref`.
+**Position is part of the contract**: a class defaulting to line 1 would pass
+a class-only check while being useless to an author. Prose is never
+asserted, per §8.3.
+
+The runner RENDERS as well as compiles, because a few classes
+(`:unsupported-js-value`, runtime attr conflicts) are raised at render time;
+a case surviving compilation alone is not yet proven rejected.
+
+Three classes stay deliberately uncovered, being internal-invariant
+assertions unreachable by construction: `:unsupported-construct`,
+`:extends`, and `:not-implemented` (the CLJS branches).
 
 ## 13. Deferred / future work
 
@@ -1454,3 +1513,85 @@ population was exactly the templates that should have been rejected, and it
 converted each of them into confident, wrong output. A fallback's value
 should be re-measured when the thing it backstops changes, not assumed to
 persist.
+
+---
+
+## Revision note — rev. 16 (S30: malformed directive heads; the diagnostics corpus)
+
+Two changes, one of which is the reason the other was findable.
+
+**S30 — a directive head with a missing operand is now a positioned error.**
+Sixteen spellings across seven constructs used to be accepted. Not one of
+them produced a diagnostic; they produced *output*. `each b xs` — the `in`
+omitted — bound the collection to `nil` and rendered an empty loop. A bare
+`if` compiled to `(if nil …)`, a permanently dead branch. A bare `case`
+compiled to a scrutinee no `when` could match except `when nil`. `mixin m`
+without a bindings vector compiled and rendered. Four spellings were worse
+than silent: `p=`, `p!=`, `#{}` and `!{}` with nothing after them died as a
+bare `NullPointerException` with a nil message — no class, no line, no
+column, the worst diagnostic in the codebase.
+
+The mechanism was uniform and worth naming, because it is not obviously a
+bug at the site: every one of these reads answered `nil` on absence, and
+**`nil` is a legal Clojure form**. Codegen then compiled it faithfully. No
+pass was wrong on its own terms; the defect lived in the seam, where a
+sentinel meaning "nothing was there" is indistinguishable from a value
+meaning "the author wrote nil". That is the sixth species of the
+records-are-maps trap (rev. 12) — a sentinel colliding with a legitimate
+value — and the seventh sighting overall.
+
+Which dictates the fix's shape. Presence is read from the READ, never from
+the form: `read-line-form` returns a map or nothing, `read-source-form`
+flags `:eof`. Testing the form instead would reject `if nil`, `when false`,
+`each x in nil` and `p= nil` — all legal, all writing that sentinel
+deliberately. `:else-if?` has carried presence-of-the-keyword separately
+from the form since rev. 13 for precisely this reason; S30 generalizes the
+discipline to a family. The `falsy-operands-stay-legal` suite pins it, and
+mutation-testing confirms that swapping presence for truthiness fails there
+— the failure mode that matters is rejecting the legal, not accepting the
+broken.
+
+One fix reached deeper than the parser. `#{}` never gets as far as a
+missing-operand check: handed a lone `}`, edamame *throws* `Unmatched
+delimiter` rather than answering `:eof`, and reports it with an
+`opened-delimiter-loc` whose `:row` and `:col` are **nil** — there is no
+opened delimiter to point at. `platform/rebase` then `dec`ed nil. The
+`:reader-error` branch immediately below had defended its coordinates with
+`or` since it was written; the `:unterminated-form` branch above it never
+had. Narrowing that branch to locations that actually know where they opened
+routes unmatched closers to `:reader-error`, where they belong.
+
+**Two departures by strictness are logged.** `mixin m` without a bindings
+vector is rejected though pug accepts it — §3.13's grammar is
+`mixin name [binding-vector]` and the vector is required even when empty, so
+this enforces existing carlin law rather than inventing it. And the whole
+S30 family fails at *compile* time where pug's equivalents are a mix of
+compile and runtime errors. No legal template changes meaning, which is why
+the golden ratchet held at 101/104 with zero flips throughout.
+
+**The diagnostics corpus (§12.5) was built.** It had been specified since
+rev. 1, as item 4 of the §12 test plan, and never constructed. That gap is
+the direct cause of both S29 and S30: the golden corpus holds only legal
+templates and compares output bytes, so it cannot observe what carlin does
+with input that ought to be rejected — and it was green through every defect
+above. The unit suite was the only instrument covering that territory, and
+it had grown reactively, a class at a time, as bugs surfaced.
+
+Auditing §8.3's enumeration against what `src/` actually raises — the audit
+rev. 21 asked for — found **40 error classes, 8 of them with no pin at
+all**. All but one were probed reachable and are now covered.
+
+The corpus inverts every axis of the golden one: illegal templates, compared
+on error class and position rather than bytes, where a case that *compiles*
+is the failure. It carries its own manifest ratchet at 43/43. Mutation
+testing confirms it catches what it was built for: reverting a single S30
+guard turns a green run into `UNCLASSIFIED — NullPointerException` and a
+non-zero exit.
+
+**Lesson: a corpus can only find defects in the population it samples.** The
+golden corpus was never inadequate at what it does — it has held 104 cases
+baselined across a dozen sessions with zero regressions ever. It simply
+samples legal templates, and no amount of it would ever have found a
+malformed one mishandled. Coverage of a *space* is not coverage of its
+*complement*. When a test artifact is green through a defect, the question
+is not whether it is passing but whether the defect was ever in its reach.

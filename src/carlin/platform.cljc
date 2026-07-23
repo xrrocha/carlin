@@ -55,7 +55,20 @@
        (catch clojure.lang.ExceptionInfo ex
          (let [d (ex-data ex)]
            (if (= :edamame/error (:type d))
-             (if-let [{r :row c :col} (:edamame/opened-delimiter-loc d)]
+             ;; S30 — an OPENED-delimiter location means a delimiter was left
+             ;; unclosed, which is :unterminated-form. But edamame also
+             ;; supplies this key for an unmatched CLOSER (`}` with nothing
+             ;; open, as an empty `#{}` interpolation produces) — and there
+             ;; it carries nil :row/:col, because no delimiter was ever
+             ;; opened to point at. `rebase` then `dec`ed nil and the whole
+             ;; compile died as a bare NullPointerException with no class,
+             ;; message or position. Requiring a non-nil row is what
+             ;; distinguishes the two: a real unterminated form always knows
+             ;; where it opened, and an unmatched closer falls through to
+             ;; :reader-error below, which has defended its coordinates with
+             ;; `or` since it was written.
+             (if-let [{r :row c :col} (let [loc (:edamame/opened-delimiter-loc d)]
+                                        (when (:row loc) loc))]
                (throw (ex-info (ex-message ex)
                                (merge {:carlin/error :unterminated-form}
                                       (rebase row col r c))))

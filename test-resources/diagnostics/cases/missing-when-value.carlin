@@ -1,0 +1,4 @@
+div
+  case 1
+    when
+      p hi

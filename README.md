@@ -8,25 +8,31 @@ the cursor refactor proceeds against a wall of red that only ever turns green.
 
 ```
 bb.edn / deps.edn            tasks (babashka) / JVM classpath & test alias
-conformance-manifest.edn     the ratchet: cases that MUST pass
+conformance-manifest.edn     the golden ratchet: cases that MUST render correctly
+diagnostics-manifest.edn     the diagnostics ratchet: cases that MUST be REJECTED
 docs/                        carlin-spec.md (the authority), carlin-conformance.md, mascot art
 src/carlin/api.cljc          spec §5 API — the public front door (compile-template, compile-ref, render)
 src/carlin/core.cljc         the front half: cursor, parse, structural checks, include-splice, inheritance
 src/carlin/codegen.cljc      the back half: checked tree -> (fn [model env] hiccup)
 src/carlin/runtime.cljc      spec §6/§7 runtime: escaper, raw marker, merge-attrs, ->js, render-hiccup
 test/carlin/harness.clj      golden runner + manifest ratchet + per-section report
+test/carlin/diagnostics_harness.clj  diagnostics runner: illegal templates, class+position
 test/carlin/*_test.cljc      spec-derived suites (details below)
 test-resources/corpus/       morphed pugjs 3.0.2 golden corpus (see its README.md)
+test-resources/diagnostics/  the diagnostics corpus: illegal templates (see its README.md)
 ```
 
 ## Tasks
 
 | Task | Meaning |
 |---|---|
-| `bb ratchet` | **The CI gate.** Runs the corpus; any manifest case failing = exit 1. Newly passing cases are listed for promotion. |
+| `bb ratchet` | **CI gate 1.** Runs the golden corpus; any manifest case failing = exit 1. Newly passing cases are listed for promotion. |
 | `bb baseline` | Rewrites the manifest from current reality (used once per legitimate jump; never to paper over a regression). |
 | `bb show <case>.carlin` | One case's expected/actual diff or error. |
-| `bb spec-tests` | The spec-derived unit suites — the contract for `carlin.runtime`, `file-resolver`, and diagnostics. Written red before the implementation; **green since S29** (20 tests, 116 assertions). |
+| `bb diagnostics` | **CI gate 2.** Runs the diagnostics corpus (illegal templates); any manifest case that compiles, or errs with the wrong class or position, = exit 1. |
+| `bb dbaseline` | Rewrites `diagnostics-manifest.edn` from current reality. |
+| `bb dshow <case>` | One diagnostics case: source, expectation, actual, verdict. |
+| `bb spec-tests` | The spec-derived unit suites — the contract for `carlin.runtime`, `file-resolver`, and diagnostics. Written red before the implementation; **green since S29** (22 tests, 161 assertions). |
 
 ## Comparison mode
 
@@ -64,15 +70,32 @@ when `carlin.runtime/render-hiccup` exists.
   forms (restrictive-four), extends-not-first, top-level-under-extends,
   block-via-include, include children, nested mixins, compile-time arity,
   default-not-last, static attr conflict, unresolvable refs, and `while` as a
-  positioned exclusion.
+  positioned exclusion. Since S30 it also covers malformed directive heads
+  and — in `falsy-operands-stay-legal` — the discipline that makes them safe:
+  absence is tested, never falsity, since `if nil` and `p= nil` are legal
+  templates carrying the same `:form nil` a missing operand does.
 
 ## Status
 
-`101 / 104` conformance, zero regressions ever; spec suites 20 tests / 116
-assertions / 0 failures. `carlin.legacy` was retired at S29 — carlin now
-compiles every template itself and **fails fast at compile time**, with
-positioned errors from both halves of the pipeline (spec §8.3). Its sole
-runtime dependency is edamame.
+Three gates, all green:
+
+| gate | command | state |
+|---|---|---|
+| golden conformance | `bb ratchet` | **101 / 104**, zero regressions ever |
+| diagnostics corpus | `bb diagnostics` | **43 / 43** |
+| spec unit suites | `bb spec-tests` | 22 tests / 161 assertions / 0 failures |
+
+`carlin.legacy` was retired at S29 — carlin now compiles every template
+itself and **fails fast at compile time**, with positioned errors from both
+halves of the pipeline (spec §8.3). Its sole runtime dependency is edamame.
+
+The **diagnostics corpus** (`test-resources/diagnostics/`, spec §12.5) was
+built at S30 and is the mirror of the golden one: illegal templates, compared
+on error class and position rather than output bytes, where a case that
+*compiles* is the failure. It exists because the golden corpus holds only
+legal templates and so cannot observe what carlin does with malformed
+source — it was green through two whole classes of defect (S29, S30) for
+that reason alone.
 
 ## Historical baseline (2026-07-16, legacy implementation)
 
