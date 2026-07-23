@@ -93,6 +93,11 @@ Four gates, all green:
 | deftemplate differential | `bb differential` | **101 identical, 0 differing** (3 uncompilable = the known reds) |
 | spec unit suites | `bb spec-tests` | 25 tests / 195 assertions / 0 failures |
 
+All four run on the JVM and babashka. **ClojureScript is designed, not
+demonstrated**: `deftemplate` is carlin's CLJS path and has never run under a
+CLJS compiler. A `:cljs-test` alias in `deps.edn` is the starting point; see
+the handoff's plan item 1 for what needs probing first.
+
 `carlin.legacy` was retired at S29 — carlin now compiles every template
 itself and **fails fast at compile time**, with positioned errors from both
 halves of the pipeline (spec §8.3). Its sole runtime dependency is edamame.

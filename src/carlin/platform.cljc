@@ -153,7 +153,19 @@
   block), so this is a live case, not a hypothetical. They are excluded here
   rather than at the call site so that every consumer of `qualify` inherits
   the exclusion instead of rediscovering it — the rev. 13 lesson, applied
-  before rather than after."
+  before rather than after.
+
+  UNVERIFIED ON CLJS, and this is the known weak point of S31 (handoff
+  rev. 23 §9 item 1). `template-ns` is a JVM Clojure namespace, so this
+  answers `clojure.core/count` — correct for JVM and bb, and quite possibly
+  WRONG when `deftemplate` is macroexpanding for a ClojureScript target,
+  where the name wanted is `cljs.core/count`. The macro runs on the JVM
+  inside the CLJS compiler's process, so nothing here fails loudly; it would
+  simply emit a binding to the wrong namespace. If that proves out, this
+  function needs the compilation target as an input and `:vocabulary`
+  becomes target-dependent. Nobody has run it. Do not assume the answer from
+  the fact that the JVM tests pass — that is precisely the evidence that
+  cannot distinguish the two cases."
   [sym]
   #?(:clj  (when-let [v (ns-resolve template-ns sym)]
              (when (and (var? v) (not (:macro (meta v))))

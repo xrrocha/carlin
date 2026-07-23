@@ -27,4 +27,17 @@
   ;; Opt-in evaluation backend (spec Q1): runtime template compilation on
   ;; platforms without eval. Kept as a proper k/v ENTRY so uncommenting
   ;; (removing the #_) restores a valid file.
-  #_#_:sci {:extra-deps {org.babashka/sci {:mvn/version "0.10.47"}}}}}
+  #_#_:sci {:extra-deps {org.babashka/sci {:mvn/version "0.10.47"}}}
+
+  ;; The CLJS matrix (spec §12, handoff rev. 23 plan item 1). `deftemplate`
+  ;; is the CLJS path and has never run under a CLJS compiler — the sandbox
+  ;; it was written in had no toolchain and no route to Maven Central, so
+  ;; CLJS support is DESIGNED, not DEMONSTRATED. This alias exists so the
+  ;; session that fixes that does not have to invent it first.
+  ;;
+  ;;   clojure -M:cljs-test -m cljs.main -re node -m carlin.cljs-matrix
+  ;;
+  ;; Version deliberately unpinned-by-comment rather than guessed: verify
+  ;; the current release before the first run.
+  :cljs-test {:extra-paths ["test" "test-resources"]
+              :extra-deps  {org.clojure/clojurescript {:mvn/version "1.11.132"}}}}}

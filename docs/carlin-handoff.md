@@ -195,16 +195,59 @@ ruling, not a bug.
 
 ## 9. Next session's plan — in order
 
-1. **sci `:eval` mirroring S15.** Sharper now than it was: `platform/qualify`
-   and `template-vocabulary` give a sci context an exact specification of what
-   to expose, and `bb differential` is the gate that proves a third strategy
-   agrees. The pattern is set — add the strategy, extend the differential.
-2. **The CLJS matrix.** `deftemplate` is the CLJS path and is written, but has
-   never run under a CLJS compiler; there is no toolchain in the sandbox. Two
-   things need real verification rather than reasoning: that the `let`-bound
-   vocabulary compiles under the CLJS analyzer, and that `known-symbol?`'s new
-   error is unreachable on the macro path. Until then, treat CLJS support as
-   *designed*, not *demonstrated*.
+**Ricardo reordered this after rev. 23 was drafted: the CLJS matrix goes
+first.** The reasoning is worth keeping, because it is a principle and not a
+scheduling preference. sci is *additive* — it adds a third evaluation
+strategy alongside two that work. CLJS is *corrective*: it can invalidate
+design decisions already shipped. S31 chose its mechanism partly on the
+argument that a `let`-bound vocabulary "works identically on CLJS, where
+namespaces are a compile-time construct" — and that argument has never been
+run. An unpaid debt on a feature just shipped outranks a new feature.
+
+1. **The CLJS matrix.** `deftemplate` is the CLJS path, is written, and has
+   never run under a CLJS compiler: the sandbox had no toolchain and no route
+   to Maven Central. Treat CLJS support as **designed, not demonstrated**
+   until this is done. `deps.edn` now carries a `:cljs-test` alias so this
+   does not start with toolchain archaeology; verify the ClojureScript
+   version before the first run rather than trusting the one written there.
+
+   What must actually be probed, in rough order of how much would have to
+   change if it fails:
+
+   - **`deftemplate`'s emission compiles under the CLJS analyzer.** The macro
+     emits `(let [count clojure.core/count, raw carlin.runtime/raw] (fn …))`.
+     On CLJS those right-hand sides must be `cljs.core/count` and
+     `carlin.runtime/raw`. `platform/qualify` resolves through
+     `ns-resolve` against `template-ns`, which is a **JVM Clojure**
+     namespace — so it will answer `clojure.core/count` even when compiling
+     for CLJS. **This is the single most likely failure in the whole
+     session**, it is a consequence of the mechanism S31 chose, and it was
+     never tested. If it breaks, `qualify` needs the compilation target as
+     an input, and `:vocabulary` becomes target-dependent.
+   - **`known-symbol?`'s new `:not-implemented` error is unreachable on the
+     macro path.** It should be: `deftemplate` runs on the JVM inside the
+     CLJS compiler's process, so the `:clj` branch is what executes. Confirm
+     rather than assume — if the `:cljs` branch fires during macroexpansion,
+     the reader conditional is being read in the wrong context.
+   - **The reader conditionals in `platform.cljc` behave under
+     self-hosted CLJS**, which is a different question from ordinary CLJS
+     and the one that matters for a browser-side `:eval`.
+   - **Output is byte-identical to the JVM.** §12 item 7 requires it, and
+     `bb differential` is the shape to copy — a `carlin.cljs-matrix`
+     namespace that renders the corpus under Node and compares against the
+     goldens. Whether that can reuse the harness or needs its own runner is
+     itself a finding.
+
+   A negative result here is a *good* outcome, not a setback: it converts
+   "designed" into a docket item with a probe record, which is the state
+   everything else in this project reaches before it gets ruled on.
+
+2. **sci `:eval` mirroring S15.** Sharper than it was: `platform/qualify` and
+   `template-vocabulary` give a sci context an exact specification of what to
+   expose, and `bb differential` is the gate proving a third strategy agrees.
+   The pattern is set — add the strategy, extend the differential. Do this
+   *after* CLJS, since a target-dependent `qualify` would change what a sci
+   context has to be handed.
 3. Vendor-vs-depend edamame — still the only runtime dependency.
 4. The three remaining golden reds — `include-only-text-body`,
    `include-with-text`, and `inheritance.extend.include` (the last a **permanent

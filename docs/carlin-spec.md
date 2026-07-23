@@ -616,8 +616,20 @@ each borrowed ambient name to what it resolves to in the template namespace, and
 ```
 
 Same vocabulary as `evaluate` supplies through `*ns*`, established by ordinary
-lexical binding instead — which works identically on ClojureScript, where
-namespaces are a compile-time construct and `ns-resolve` does not exist.
+lexical binding instead — which is expected to work identically on
+ClojureScript, where namespaces are a compile-time construct and `ns-resolve`
+does not exist.
+
+**That CLJS claim is designed, not demonstrated (rev. 17).** It has never run
+under a ClojureScript compiler. One consequence in particular is unverified and
+is the likeliest thing to be wrong: `platform/qualify` resolves against
+`template-ns`, a **JVM** namespace, so it answers `clojure.core/count` — while a
+CLJS target wants `cljs.core/count`. `deftemplate` macroexpands on the JVM
+inside the CLJS compiler's process, so nothing would fail loudly; it would emit
+a binding to the wrong namespace. If that proves out, `qualify` needs the
+compilation target as an input and `:vocabulary` becomes target-dependent. Until
+the matrix runs, treat every CLJS statement in this section as a design
+intention.
 
 This is **not** the codegen symbol-rewriting §8.2 rejected. Nothing in `:code`
 is altered; only the binding that gives a name meaning is made explicit. That
@@ -819,7 +831,7 @@ Every pass is tree → tree except the ends. Every node carries
 | `evaluate` | `eval` (or sci) | `deftemplate` macro path, or sci for runtime compilation |
 | `resolve-source` | caller's resolver | resolver at macro time; preloaded map at runtime |
 | `known-symbol?` | `resolve` / sci ctx | resolved at macroexpansion, by `deftemplate` |
-| `qualify` | `ns-resolve` in `template-ns`, macros excluded (rev. 17) | at macroexpansion, same surface |
+| `qualify` | `ns-resolve` in `template-ns`, macros excluded (rev. 17) | at macroexpansion — **unverified**, may need the target (see §5.1) |
 | `template-ns` | dedicated namespace (clojure.core + `raw`/`->js`) | sci ctx / analyzer env exposing the same vocabulary |
 
 **`known-symbol?`'s CLJS branch is now a classified error, not `false`
